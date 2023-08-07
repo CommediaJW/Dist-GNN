@@ -1,0 +1,7 @@
+build
+.vscode
+*.pyc
+*.egg-info
+venv
+*.egg
+*.pt
