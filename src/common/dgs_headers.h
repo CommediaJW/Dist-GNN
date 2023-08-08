@@ -33,6 +33,17 @@
     }                                                                          \
   } while (0)
 
+#define SHM_CHECK(err)                                          \
+  {                                                             \
+    if (err == -1) {                                            \
+      fprintf(stderr,                                           \
+              "%s:%d ERROR: SHM call failed "                   \
+              "with "                                           \
+              "%s (%d).\n",                                     \
+              __FILE__, __LINE__, std::strerror(errno), errno); \
+    }                                                           \
+  }
+
 #define DGS_ID_TYPE_SWITCH(val, IdType, ...)         \
   do {                                               \
     if ((val) == torch::kInt32) {                    \

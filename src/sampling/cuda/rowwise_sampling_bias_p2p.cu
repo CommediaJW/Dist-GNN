@@ -1,5 +1,4 @@
 #include <curand_kernel.h>
-#include <torch/script.h>
 
 #include "../../cache/tensor_p2p_cache.h"
 #include "../../common/cuda/cub_function.h"

@@ -42,8 +42,12 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g")
 
 # Define our library target
 file(GLOB DGS_SRC
+  src/*.cc
   src/cache/*.cc
   src/common/*.cc
+  src/hashmap/cuda/*.cu
+  src/nccl/*.cc
+  src/sampling/*.cc
   src/sampling/cuda/*.cu
 )
 pybind11_add_module(dgs ${DGS_SRC})

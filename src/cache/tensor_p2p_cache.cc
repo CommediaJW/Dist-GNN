@@ -2,7 +2,7 @@
 
 #include "../common/cuda_context.h"
 #include "../common/dgs_headers.h"
-#include "../common/nccl_context.h"
+#include "../nccl/nccl_context.h"
 #include "tensor_p2p_cache.h"
 
 namespace dgs {
@@ -29,19 +29,15 @@ inline size_t _getTensorTypeSizeOf(torch::Dtype type) {
   }
 }
 
-inline torch::ScalarType _pybindObj2TorchDtype(pybind11::object dtype) {
-  return torch::python::detail::py_object_to_dtype(dtype);
-}
-
 TensorP2PServer::TensorP2PServer(std::vector<int64_t> device_tensor_shapes,
-                                 pybind11::object dtype) {
+                                 torch::ScalarType dtype) {
   local_rank_ = nccl::local_rank;
   num_partitions_ = nccl::world_size;
 
   device_item_num_ = device_tensor_shapes[0];
   CHECK(device_item_num_ > 0);
 
-  dtype_ = _pybindObj2TorchDtype(dtype);
+  dtype_ = dtype;
   dtype_size_t_ = _getTensorTypeSizeOf(dtype_);
 
   int64_t stride = 1;

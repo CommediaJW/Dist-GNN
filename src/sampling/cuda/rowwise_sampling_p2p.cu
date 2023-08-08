@@ -1,5 +1,4 @@
 #include <curand_kernel.h>
-#include <torch/script.h>
 
 #include "../../cache/tensor_p2p_cache.h"
 #include "../../common/cuda/atomic.h"
@@ -217,7 +216,7 @@ RowWiseSamplingUniformWithP2PCachingCUDA(
             }
           });
       common::cuda::cub_exclusiveSum<EType>(sub_indptr.data_ptr<EType>(),
-                                           num_items + 1);
+                                            num_items + 1);
       thrust::device_ptr<EType> item_prefix(
           static_cast<EType *>(sub_indptr.data_ptr<EType>()));
       int nnz = item_prefix[num_items];

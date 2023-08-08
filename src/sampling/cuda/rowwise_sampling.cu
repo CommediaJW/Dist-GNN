@@ -1,5 +1,4 @@
 #include <curand_kernel.h>
-#include <torch/script.h>
 
 #include "../../common/cuda/atomic.h"
 #include "../../common/cuda/cub_function.h"

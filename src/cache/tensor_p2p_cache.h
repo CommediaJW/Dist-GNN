@@ -25,8 +25,9 @@ struct tensor_p2p_server_wrapper {
 
 class TensorP2PServer {
  public:
+  TensorP2PServer() {}
   TensorP2PServer(std::vector<int64_t> device_tensor_shapes,
-                  pybind11::object dtype);
+                  torch::ScalarType dtype);
   ~TensorP2PServer() { _Free(); }
 
   void LoadDeviceTensorData(torch::Tensor device_tensor_data);

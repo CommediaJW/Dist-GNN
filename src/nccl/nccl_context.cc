@@ -1,8 +1,8 @@
 #include <torch/script.h>
 #include <vector>
 
-#include "cuda_common.h"
-#include "dgs_headers.h"
+#include "../common/cuda_common.h"
+#include "../common/dgs_headers.h"
 #include "nccl_context.h"
 
 namespace dgs {
