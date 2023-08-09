@@ -1,5 +1,7 @@
 #include "../../common/cuda_common.h"
 #include "../../common/dgs_headers.h"
+
+#include "gpu_hash_table.cuh"
 #include "hashmap.h"
 #include "ops.h"
 
