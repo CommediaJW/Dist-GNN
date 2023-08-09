@@ -7,8 +7,7 @@
 namespace dgs {
 namespace nccl {
 
-std::vector<torch::Tensor> NCCLTensorAlltoAll(
-    std::vector<torch::Tensor> input_list);
+std::vector<torch::Tensor> NCCLTensorAllGather(torch::Tensor local_tensor);
 
 }  // namespace nccl
 }  // namespace dgs

@@ -49,16 +49,18 @@ class P2PCacheSampler {
   int cpu_hashmap_key_shmid_ = -1;
   int cpu_hashmap_idx_shmid_ = -1;
 
-  cache::TensorP2PServer gpu_indptr_;
-  cache::TensorP2PServer gpu_indices_;
-  cache::TensorP2PServer gpu_probs_;
+  cache::TensorP2PServer *gpu_indptr_;
+  cache::TensorP2PServer *gpu_indices_;
+  cache::TensorP2PServer *gpu_probs_;
 
   torch::Tensor gpu_hashmap_key_;
   torch::Tensor gpu_hashmap_devid_;
   torch::Tensor gpu_hashmap_idx_;
 
   int64_t device_id_;
-  bool bias_;
+  bool bias_ = false;
+  bool cpu_cache_flag_ = false;
+  bool gpu_cache_flag_ = false;
 
  public:
   P2PCacheSampler() {}
@@ -66,8 +68,15 @@ class P2PCacheSampler {
                   torch::Tensor probs, torch::Tensor cache_nids,
                   torch::Tensor cpu_nids, int64_t device_id);
   ~P2PCacheSampler();
-  NodeClassifictionSampledResult NodeClassifictionSample(
-      torch::Tensor seeds, std::vector<int64_t> fan_out, bool replace);
+  std::vector<NodeClassifictionSampledTensors> NodeClassifictionSample(
+      torch::Tensor seeds, std::vector<int64_t> fan_out, bool replace = false);
+  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+  GetCPUStructureTensors();
+  std::tuple<torch::Tensor, torch::Tensor> GetCPUHashTensors();
+  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+  GetLocalCachedStructureTensors();
+  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+  GetLocalCachedHashTensors();
 };
 
 }  // namespace sampling

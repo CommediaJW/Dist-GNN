@@ -75,8 +75,8 @@ NodeClassifictionSampledResult P2PCacheNodeClassificationSampleBias(
   return NodeClassifictionSampledResult(results);
 }
 
-std::tuple<torch::Tensor, int> RegisterSharedMemTensor(torch::Tensor tensor,
-                                                       int64_t rank) {
+std::tuple<torch::Tensor, int> RegisterSharedMemPinnedTensor(
+    torch::Tensor tensor, int64_t rank) {
   void *buff = nullptr;
   int64_t size = tensor.element_size() * tensor.numel();
   CHECK(size > 0);
@@ -111,6 +111,21 @@ std::tuple<torch::Tensor, int> RegisterSharedMemTensor(torch::Tensor tensor,
       shmid);
 }
 
+void FreeSharedMemPinnedTensor(torch::Tensor tensor, int shmid, int64_t rank) {
+  void *mem_ptr;
+  DGS_VALUE_TYPE_SWITCH(tensor.dtype(), ValueType, {
+    mem_ptr = reinterpret_cast<void *>(tensor.data_ptr<ValueType>());
+  });
+  CUDA_CALL(cudaHostUnregister(mem_ptr));
+  int err = shmdt(mem_ptr);
+  SHM_CHECK(err);
+  nccl::_Barrier();
+  if (rank == 0) {
+    int err = shmctl(shmid, IPC_RMID, nullptr);
+    SHM_CHECK(err);
+  }
+}
+
 P2PCacheSampler::P2PCacheSampler(torch::Tensor indptr, torch::Tensor indices,
                                  torch::Tensor probs, torch::Tensor cache_nids,
                                  torch::Tensor cpu_nids, int64_t device_id) {
@@ -128,24 +143,25 @@ P2PCacheSampler::P2PCacheSampler(torch::Tensor indptr, torch::Tensor indices,
 
   // cpu data
   if (cpu_nids.numel() > 0) {
+    this->cpu_cache_flag_ = true;
     if (!cpu_nids.device().is_cuda()) {
       TensorPinMemory(cpu_nids);
     }
     // extract data and register as shared pinned memory
     auto sub_indptr = cuda::ExtractIndptr(cpu_nids, indptr);
     std::tie(this->cpu_indptr_, this->cpu_indptr_shmid_) =
-        RegisterSharedMemTensor(sub_indptr, this->device_id_);
+        RegisterSharedMemPinnedTensor(sub_indptr, this->device_id_);
 
     auto sub_indices =
         cuda::ExtractEdgeData(cpu_nids, indptr, sub_indptr, indices);
     std::tie(this->cpu_indices_, this->cpu_indices_shmid_) =
-        RegisterSharedMemTensor(sub_indices, this->device_id_);
+        RegisterSharedMemPinnedTensor(sub_indices, this->device_id_);
 
     if (this->bias_) {
       auto sub_probs =
           cuda::ExtractEdgeData(cpu_nids, indptr, sub_indptr, probs);
       std::tie(this->cpu_probs_, this->cpu_probs_shmid_) =
-          RegisterSharedMemTensor(sub_probs, this->device_id_);
+          RegisterSharedMemPinnedTensor(sub_probs, this->device_id_);
     }
 
     // create hashmap and register as shared pinned memory
@@ -153,9 +169,9 @@ P2PCacheSampler::P2PCacheSampler(torch::Tensor indptr, torch::Tensor indices,
     std::tie(cpu_hash_key, cpu_hash_idx) =
         hashmap::cuda::CreateNidsHashMapCUDA(cpu_nids);
     std::tie(this->cpu_hashmap_key_, this->cpu_hashmap_key_shmid_) =
-        RegisterSharedMemTensor(cpu_hash_key, this->device_id_);
+        RegisterSharedMemPinnedTensor(cpu_hash_key, this->device_id_);
     std::tie(this->cpu_hashmap_idx_, this->cpu_hashmap_idx_shmid_) =
-        RegisterSharedMemTensor(cpu_hash_idx, this->device_id_);
+        RegisterSharedMemPinnedTensor(cpu_hash_idx, this->device_id_);
 
     if (!cpu_nids.device().is_cuda()) {
       TensorUnpinMemory(cpu_nids);
@@ -164,45 +180,27 @@ P2PCacheSampler::P2PCacheSampler(torch::Tensor indptr, torch::Tensor indices,
 
   // gpu cache
   if (cache_nids.numel() > 0) {
+    gpu_cache_flag_ = true;
     if (!cache_nids.device().is_cuda()) {
       cache_nids = cache_nids.to(
           torch::TensorOptions().device(torch::kCUDA, this->device_id_));
     }
     // extract data and cache
     auto sub_indptr = cuda::ExtractIndptr(cache_nids, indptr);
-    auto sub_indptr_shape = sub_indptr.sizes();
-    this->gpu_indptr_ = cache::TensorP2PServer(
-        std::vector<int64_t>(sub_indptr_shape.begin(), sub_indptr_shape.end()),
-        torch::typeMetaToScalarType(sub_indptr.dtype()));
-    this->gpu_indptr_.LoadDeviceTensorData(sub_indptr);
-
+    this->gpu_indptr_ = new cache::TensorP2PServer(sub_indptr);
     auto sub_indices =
         cuda::ExtractEdgeData(cache_nids, indptr, sub_indptr, indices);
-    auto sub_indices_shape = sub_indices.sizes();
-    this->gpu_indices_ = cache::TensorP2PServer(
-        std::vector<int64_t>(sub_indices_shape.begin(),
-                             sub_indices_shape.end()),
-        torch::typeMetaToScalarType(sub_indices.dtype()));
-    this->gpu_indices_.LoadDeviceTensorData(sub_indices);
-
+    this->gpu_indices_ = new cache::TensorP2PServer(sub_indices);
     if (this->bias_) {
       auto sub_probs =
           cuda::ExtractEdgeData(cache_nids, indptr, sub_indptr, probs);
-      auto sub_probs_shape = sub_probs.sizes();
-      this->gpu_probs_ = cache::TensorP2PServer(
-          std::vector<int64_t>(sub_probs_shape.begin(), sub_probs_shape.end()),
-          torch::typeMetaToScalarType(sub_probs.dtype()));
-      this->gpu_probs_.LoadDeviceTensorData(sub_probs);
+      this->gpu_probs_ = new cache::TensorP2PServer(sub_probs);
     }
-
     // create hashmap
     std::vector<torch::Tensor> devices_cache_nids;
     int64_t all_cache_nids_num = 0;
     if (world_size > 1) {
-      std::vector<torch::Tensor> send_cache_nids;
-      send_cache_nids.resize(world_size);
-      send_cache_nids[this->device_id_] = cache_nids;
-      devices_cache_nids = nccl::NCCLTensorAlltoAll(send_cache_nids);
+      devices_cache_nids = nccl::NCCLTensorAllGather(cache_nids);
       torch::Tensor cached_mask = torch::zeros(
           {
               num_nodes,
@@ -231,24 +229,84 @@ P2PCacheSampler::P2PCacheSampler(torch::Tensor indptr, torch::Tensor indices,
   }
 }
 
-NodeClassifictionSampledResult P2PCacheSampler::NodeClassifictionSample(
-    torch::Tensor seeds, std::vector<int64_t> fan_out, bool replace) {
+P2PCacheSampler::~P2PCacheSampler() {
+  if (this->cpu_cache_flag_) {
+    FreeSharedMemPinnedTensor(this->cpu_indptr_, this->cpu_indptr_shmid_,
+                              this->device_id_);
+    FreeSharedMemPinnedTensor(this->cpu_indices_, this->cpu_indices_shmid_,
+                              this->device_id_);
+    if (this->bias_) {
+      FreeSharedMemPinnedTensor(this->cpu_probs_.value(),
+                                this->cpu_probs_shmid_, this->device_id_);
+    }
+    FreeSharedMemPinnedTensor(this->cpu_hashmap_key_,
+                              this->cpu_hashmap_key_shmid_, this->device_id_);
+    FreeSharedMemPinnedTensor(this->cpu_hashmap_idx_,
+                              this->cpu_hashmap_idx_shmid_, this->device_id_);
+  }
+  if (this->gpu_cache_flag_) {
+    delete this->gpu_indptr_;
+    delete this->gpu_indices_;
+    if (this->bias_) {
+      delete this->gpu_probs_;
+    }
+  }
+}
+
+std::vector<NodeClassifictionSampledTensors>
+P2PCacheSampler::NodeClassifictionSample(torch::Tensor seeds,
+                                         std::vector<int64_t> fan_out,
+                                         bool replace) {
   if (this->bias_) {
     return P2PCacheNodeClassificationSampleBias(
                seeds, this->cpu_indptr_, this->cpu_indices_,
-               this->cpu_probs_.value(), &this->gpu_indptr_,
-               &this->gpu_indices_, &this->gpu_probs_, this->gpu_hashmap_key_,
+               this->cpu_probs_.value(), this->gpu_indptr_, this->gpu_indices_,
+               this->gpu_probs_, this->gpu_hashmap_key_,
                this->gpu_hashmap_devid_, this->gpu_hashmap_idx_,
                this->cpu_hashmap_key_, this->cpu_hashmap_idx_, fan_out, replace)
         .to_py();
   } else {
     return P2PCacheNodeClassificationSampleUniform(
-               seeds, this->cpu_indptr_, this->cpu_indices_, &this->gpu_indptr_,
-               &this->gpu_indices_, this->gpu_hashmap_key_,
+               seeds, this->cpu_indptr_, this->cpu_indices_, this->gpu_indptr_,
+               this->gpu_indices_, this->gpu_hashmap_key_,
                this->gpu_hashmap_devid_, this->gpu_hashmap_idx_,
                this->cpu_hashmap_key_, this->cpu_hashmap_idx_, fan_out, replace)
         .to_py();
   }
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+P2PCacheSampler::GetCPUStructureTensors() {
+  if (this->bias_) {
+    return std::make_tuple(this->cpu_indptr_, this->cpu_indices_,
+                           this->cpu_probs_.value());
+  } else {
+    return std::make_tuple(this->cpu_indptr_, this->cpu_indices_,
+                           torch::Tensor());
+  }
+}
+
+std::tuple<torch::Tensor, torch::Tensor> P2PCacheSampler::GetCPUHashTensors() {
+  return std::make_tuple(this->cpu_hashmap_key_, this->cpu_hashmap_idx_);
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+P2PCacheSampler::GetLocalCachedStructureTensors() {
+  if (this->bias_) {
+    return std::make_tuple(this->gpu_indptr_->GetLocalDeviceTensor(),
+                           this->gpu_indices_->GetLocalDeviceTensor(),
+                           this->gpu_probs_->GetLocalDeviceTensor());
+  } else {
+    return std::make_tuple(this->gpu_indptr_->GetLocalDeviceTensor(),
+                           this->gpu_indices_->GetLocalDeviceTensor(),
+                           torch::Tensor());
+  }
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+P2PCacheSampler::GetLocalCachedHashTensors() {
+  return std::make_tuple(this->gpu_hashmap_key_, this->gpu_hashmap_idx_,
+                         this->gpu_hashmap_devid_);
 }
 
 }  // namespace sampling
