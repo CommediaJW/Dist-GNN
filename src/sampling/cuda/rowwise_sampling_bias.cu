@@ -52,9 +52,9 @@ inline std::pair<torch::Tensor, torch::Tensor> _GetSubAndTempIndptr(
       });
 
   common::cuda::cub_exclusiveSum<EType>(thrust::raw_pointer_cast(sub_prefix),
-                                       num_items + 1);
+                                        num_items + 1);
   common::cuda::cub_exclusiveSum<EType>(thrust::raw_pointer_cast(temp_prefix),
-                                       num_items + 1);
+                                        num_items + 1);
   return {sub_indptr, temp_indptr};
 }
 

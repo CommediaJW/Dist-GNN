@@ -1,6 +1,8 @@
 #include <pybind11/pybind11.h>
 #include <torch/extension.h>
 
+#include "cache/cuda/ops.h"
+#include "common/pin_memory.h"
 #include "nccl/nccl_context.h"
 #include "sampling/sampler.h"
 
@@ -30,4 +32,11 @@ PYBIND11_MODULE(dgs, m) {
   // nccl communicating
   m_ops.def("_CAPI_get_unique_id", &nccl::GetUniqueId)
       .def("_CAPI_set_nccl", &nccl::SetNCCL);
+  // cache preprocess ops
+  m_ops.def("_CAPI_compute_frontier_heat", &cache::cuda::ComputeFrontierHeat)
+      .def("_CAPI_compute_frontier_heat_with_bias",
+           &cache::cuda::ComputeFrontierHeatWithBias);
+  // tensor pin memory
+  m_ops.def("_CAPI_tensor_pin_memory", &TensorPinMemory)
+      .def("_CAPI_tensor_unpin_memory", &TensorUnpinMemory);
 }

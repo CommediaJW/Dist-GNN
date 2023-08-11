@@ -44,6 +44,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g")
 file(GLOB DGS_SRC
   src/*.cc
   src/cache/*.cc
+  src/cache/cuda/*.cu
   src/common/*.cc
   src/hashmap/cuda/*.cu
   src/nccl/*.cc
