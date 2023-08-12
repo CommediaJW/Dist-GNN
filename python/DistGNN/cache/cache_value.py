@@ -166,8 +166,7 @@ def get_structure_space(nids: torch.Tensor, graph: dict, probs: str = "None"):
 def get_feature_space(graph: dict):
     assert "features" in graph
     assert "indptr" in graph
-    return int(graph["features"].element_size() *
-               graph["features"].element_size() /
+    return int(graph["features"].element_size() * graph["features"].numel() /
                (graph["indptr"].numel() - 1))
 
 
@@ -265,7 +264,7 @@ def get_cache_nids_selfless(graph: dict,
     feature_space = get_feature_space(graph)
     feature_value = get_node_value(feature_heat[feature_hot_nids],
                                    feature_space, feature_reduced_time)
-    feature_space = torch.full_like(feature_hot_nids, feature_value)
+    feature_space = torch.full_like(feature_hot_nids, feature_space)
 
     sampling_cache_nids, feature_cache_nids, consumed_mem = get_cache_nids_local(
         sampling_hot_nids, sampling_space, sampling_value, feature_hot_nids,
@@ -279,7 +278,7 @@ def get_cache_nids_selfless(graph: dict,
         sampling_heat[sampling_cache_nids] = 0
         feature_heat[feature_cache_nids] = 0
 
-        sampling_cache_nids_local, feature_cache_nids_local, _ = get_cache_nids_selfish(
+        sampling_cache_nids_local, feature_cache_nids_local = get_cache_nids_selfish(
             graph,
             sampling_heat,
             feature_heat,
@@ -292,14 +291,14 @@ def get_cache_nids_selfless(graph: dict,
             feature_read_bytes_host,
             probs=probs)
 
+        sampling_heat[sampling_cache_nids] = sampling_heat_backup
+        feature_heat[feature_cache_nids] = feature_heat_backup
+        del sampling_heat_backup, feature_heat_backup
+
         sampling_cache_nids = torch.cat(
             [sampling_cache_nids, sampling_cache_nids_local])
         feature_cache_nids = torch.cat(
             [feature_cache_nids, feature_cache_nids_local])
-
-        sampling_heat[sampling_cache_nids] = sampling_heat_backup
-        feature_heat[feature_cache_nids] = feature_heat_backup
-        del sampling_heat_backup, feature_heat_backup
 
         sampling_cache_nids = sampling_cache_nids[torch.argsort(
             sampling_heat[sampling_cache_nids], descending=True)]
@@ -310,18 +309,18 @@ def get_cache_nids_selfless(graph: dict,
 
 
 # sampling_heat & feature_heat: heat of all the nodes
-def compute_real_value_selfish(graph,
-                               sampling_heat,
-                               feature_heat,
-                               sampling_cache_nids,
-                               feature_cache_nids,
-                               bandwidth_gpu,
-                               sampling_read_bytes_gpu,
-                               feature_read_bytes_gpu,
-                               bandwidth_host,
-                               sampling_read_bytes_host,
-                               feature_read_bytes_host,
-                               probs: str = None):
+def compute_total_value_selfish(graph,
+                                sampling_heat,
+                                feature_heat,
+                                sampling_cache_nids,
+                                feature_cache_nids,
+                                bandwidth_gpu,
+                                sampling_read_bytes_gpu,
+                                feature_read_bytes_gpu,
+                                bandwidth_host,
+                                sampling_read_bytes_host,
+                                feature_read_bytes_host,
+                                probs: str = None):
     value = 0
 
     sampling_reduced_time = sampling_read_bytes_host / bandwidth_host - sampling_read_bytes_gpu / bandwidth_gpu
@@ -343,35 +342,35 @@ def compute_real_value_selfish(graph,
 
 
 # sampling_heat & feature_heat: heat of all the nodes
-def compute_real_value_selfless(graph,
-                                sampling_heat,
-                                feature_heat,
-                                sampling_cache_nids,
-                                feature_cache_nids,
-                                bandwidth_gpu,
-                                bandwidth_nvlink,
-                                num_nvlink,
-                                sampling_read_bytes_gpu,
-                                feature_read_bytes_gpu,
-                                bandwidth_host,
-                                sampling_read_bytes_host,
-                                feature_read_bytes_host,
-                                probs: str = None,
-                                group=None):
+def compute_total_value_selfless(graph,
+                                 sampling_heat,
+                                 feature_heat,
+                                 sampling_cache_nids,
+                                 feature_cache_nids,
+                                 bandwidth_gpu,
+                                 bandwidth_nvlink,
+                                 num_nvlink,
+                                 sampling_read_bytes_gpu,
+                                 feature_read_bytes_gpu,
+                                 bandwidth_host,
+                                 sampling_read_bytes_host,
+                                 feature_read_bytes_host,
+                                 probs: str = None,
+                                 group=None):
 
     bandwidth_local = bandwidth_gpu - (num_nvlink - 1) * bandwidth_nvlink
-    local_value = compute_real_value_selfish(graph,
-                                             sampling_heat,
-                                             feature_heat,
-                                             sampling_cache_nids,
-                                             feature_cache_nids,
-                                             bandwidth_local,
-                                             sampling_read_bytes_gpu,
-                                             feature_read_bytes_gpu,
-                                             bandwidth_host,
-                                             sampling_read_bytes_host,
-                                             feature_read_bytes_host,
-                                             probs=probs)
+    local_value = compute_total_value_selfish(graph,
+                                              sampling_heat,
+                                              feature_heat,
+                                              sampling_cache_nids,
+                                              feature_cache_nids,
+                                              bandwidth_local,
+                                              sampling_read_bytes_gpu,
+                                              feature_read_bytes_gpu,
+                                              bandwidth_host,
+                                              sampling_read_bytes_host,
+                                              feature_read_bytes_host,
+                                              probs=probs)
 
     # get known of remote nids
     sampling_nids_mask = torch.zeros(graph["indptr"].numel() - 1,
@@ -383,8 +382,8 @@ def compute_real_value_selfless(graph,
                                     dtype=torch.bool)
     feature_nids_mask[feature_cache_nids] = True
 
-    dist.reduce(sampling_nids_mask, 0, dist.ReduceOp.BOR, group)
-    dist.reduce(feature_nids_mask, 0, dist.ReduceOp.BOR, group)
+    dist.reduce(sampling_nids_mask, 0, dist.ReduceOp.SUM, group)
+    dist.reduce(feature_nids_mask, 0, dist.ReduceOp.SUM, group)
     dist.broadcast(sampling_nids_mask, 0, group)
     dist.broadcast(feature_nids_mask, 0, group)
 
@@ -394,17 +393,25 @@ def compute_real_value_selfless(graph,
     remote_sampling_cache_nids = torch.nonzero(sampling_nids_mask).flatten()
     remote_feature_cache_nids = torch.nonzero(feature_nids_mask).flatten()
 
-    remote_value = compute_real_value_selfish(graph,
-                                              sampling_heat,
-                                              feature_heat,
-                                              remote_sampling_cache_nids,
-                                              remote_feature_cache_nids,
-                                              bandwidth_nvlink,
-                                              sampling_read_bytes_gpu,
-                                              feature_read_bytes_gpu,
-                                              bandwidth_host,
-                                              sampling_read_bytes_host,
-                                              feature_read_bytes_host,
-                                              probs=probs)
+    remote_value = compute_total_value_selfish(graph,
+                                               sampling_heat,
+                                               feature_heat,
+                                               remote_sampling_cache_nids,
+                                               remote_feature_cache_nids,
+                                               bandwidth_nvlink,
+                                               sampling_read_bytes_gpu,
+                                               feature_read_bytes_gpu,
+                                               bandwidth_host,
+                                               sampling_read_bytes_host,
+                                               feature_read_bytes_host,
+                                               probs=probs)
 
     return local_value + remote_value
+
+
+def get_available_memory(device, reserved_mem):
+    available_mem = int(
+        torch.cuda.mem_get_info(device)[1] -
+        torch.cuda.memory_allocated(device=device) - reserved_mem)
+    available_mem = max(available_mem, 0)
+    return available_mem
