@@ -2,8 +2,6 @@ import torch
 import torch.distributed as dist
 import dgs
 
-PRINT = False
-
 
 def get_node_heat(indptr: torch.Tensor,
                   indices: torch.Tensor,
@@ -382,10 +380,8 @@ def compute_total_value_selfless(graph,
                                     dtype=torch.bool)
     feature_nids_mask[feature_cache_nids] = True
 
-    dist.reduce(sampling_nids_mask, 0, dist.ReduceOp.SUM, group)
-    dist.reduce(feature_nids_mask, 0, dist.ReduceOp.SUM, group)
-    dist.broadcast(sampling_nids_mask, 0, group)
-    dist.broadcast(feature_nids_mask, 0, group)
+    dist.all_reduce(sampling_nids_mask, dist.ReduceOp.SUM, group)
+    dist.all_reduce(feature_nids_mask, dist.ReduceOp.SUM, group)
 
     sampling_nids_mask[sampling_cache_nids] = False
     feature_nids_mask[feature_cache_nids] = False
