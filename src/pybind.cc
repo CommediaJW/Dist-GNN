@@ -3,7 +3,9 @@
 
 #include "cache/cuda/ops.h"
 #include "common/pin_memory.h"
+#include "feature/cuda/ops.h"
 #include "nccl/nccl_context.h"
+#include "sampling/cuda/ops.h"
 #include "sampling/sampler.h"
 
 using namespace dgs;
@@ -39,4 +41,14 @@ PYBIND11_MODULE(dgs, m) {
   // tensor pin memory
   m_ops.def("_CAPI_tensor_pin_memory", &TensorPinMemory)
       .def("_CAPI_tensor_unpin_memory", &TensorUnpinMemory);
+  // cuda tensor index
+  m_ops.def("_CAPI_cuda_index", &feature::cuda::IndexCUDA);
+  // cuda sampling
+  m_ops
+      .def("_CAPI_cuda_sample_neighbors",
+           &sampling::cuda::RowWiseSamplingUniformCUDA)
+      .def("_CAPI_cuda_sample_neighbors_bias",
+           &sampling::cuda::RowWiseSamplingBiasCUDA)
+      .def("_CAPI_cuda_sampled_tensor_relabel",
+           &sampling::cuda::TensorRelabelCUDA);
 }
