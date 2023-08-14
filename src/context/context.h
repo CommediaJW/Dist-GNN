@@ -19,11 +19,10 @@ class RandomEngine {
   std::uniform_int_distribution<uint64_t> dis_;
 };
 
-static RandomEngine random_engine = RandomEngine();
-
 namespace dgs {
 namespace ctx {
 
+static RandomEngine random_engine;
 uint64_t randn_uint64();
 
 }  // namespace ctx
