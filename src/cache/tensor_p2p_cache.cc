@@ -8,37 +8,16 @@
 namespace dgs {
 namespace cache {
 
-inline void *_getTensorVoidDataPtr(torch::Tensor data) {
-  return data.storage().data();
-}
-
-inline size_t _getTensorTypeSizeOf(torch::Dtype type) {
-  if (type == torch::kInt32) {
-    return sizeof(int32_t);
-  } else if (type == torch::kInt64) {
-    return sizeof(int64_t);
-  } else if (type == torch::kFloat) {
-    return sizeof(float);
-  } else if (type == torch::kDouble) {
-    return sizeof(double);
-  } else if (type == torch::kBool) {
-    return sizeof(bool);
-  } else {
-    fprintf(stderr, "Error in _getTensorSizeInByte!\n");
-    exit(-1);
-  }
-}
-
-TensorP2PServer::TensorP2PServer(torch::Tensor tensor) {
-  auto device_tensor_shapes = tensor.sizes();
+TensorP2PServer::TensorP2PServer(torch::Tensor data) {
+  auto device_tensor_shapes = data.sizes();
   local_rank_ = nccl::local_rank;
   num_partitions_ = nccl::world_size;
 
   device_item_num_ = device_tensor_shapes[0];
   CHECK(device_item_num_ > 0);
 
-  dtype_ = torch::typeMetaToScalarType(tensor.dtype());
-  dtype_size_t_ = tensor.element_size();
+  dtype_ = torch::typeMetaToScalarType(data.dtype());
+  dtype_size_t_ = data.element_size();
 
   int64_t stride = 1;
   shapes_.assign(device_tensor_shapes.begin(), device_tensor_shapes.end());
@@ -58,7 +37,7 @@ TensorP2PServer::TensorP2PServer(torch::Tensor tensor) {
   void *uva_device_ptr =
       CUDAContext::cuda_context.raw_alloc(device_cached_size_);
   CUDA_CALL(cudaMemcpy(uva_device_ptr,
-                       reinterpret_cast<char *>(tensor.storage().data()),
+                       reinterpret_cast<char *>(data.storage().data()),
                        device_cached_size_, cudaMemcpyDefault));
   device_ptrs_[local_rank_] = uva_device_ptr;
 
