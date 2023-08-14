@@ -23,6 +23,23 @@ struct tensor_p2p_server_wrapper {
   }
 };
 
+template <typename ValueType>
+struct torch_tensor_wrapper {
+  void *device_ptr_;
+
+  __host__ torch_tensor_wrapper(void *device_ptr) { device_ptr = device_ptr; }
+
+  ~torch_tensor_wrapper(){};
+
+  __device__ inline ValueType At(uint64_t index) {
+    return reinterpret_cast<ValueType *>(device_ptr_)[index];
+  }
+
+  __device__ inline ValueType At(uint32_t index) {
+    return reinterpret_cast<ValueType *>(device_ptr_)[index];
+  }
+};
+
 class TensorP2PServer {
  public:
   TensorP2PServer() {}
