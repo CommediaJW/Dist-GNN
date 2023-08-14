@@ -47,25 +47,24 @@ struct Hashmap {
     }
   }
 
-  __device__ inline uint32_t Hash32Shift(uint32_t key) {
-    key = ~key + (key << 15);  // key = (key << 15) - key - 1;
-    key = key ^ (key >> 12);
-    key = key + (key << 2);
-    key = key ^ (key >> 4);
-    key = key * 2057;  // key = (key + (key << 3)) + (key << 11);
-    key = key ^ (key >> 16);
-    return key;
+  // 32 bit Murmur3 hash
+  __device__ inline uint32_t Hash32Shift(uint32_t k) {
+    k ^= k >> 16;
+    k *= 0x85ebca6b;
+    k ^= k >> 13;
+    k *= 0xc2b2ae35;
+    k ^= k >> 16;
+    return k;
   }
 
-  __device__ inline uint64_t Hash64Shift(uint64_t key) {
-    key = (~key) + (key << 21);             // key = (key << 21) - key - 1;
-    key = key ^ (key >> 24);
-    key = (key + (key << 3)) + (key << 8);  // key * 265
-    key = key ^ (key >> 14);
-    key = (key + (key << 2)) + (key << 4);  // key * 21
-    key = key ^ (key >> 28);
-    key = key + (key << 31);
-    return key;
+  // 64 bit Murmur3 hash
+  __device__ inline uint64_t Hash64Shift(uint64_t k) {
+    k ^= k >> 33;
+    k *= 0xff51afd7ed558ccd;
+    k ^= k >> 33;
+    k *= 0xc4ceb9fe1a85ec53;
+    k ^= k >> 33;
+    return k;
   }
 
   __device__ inline uint32_t hash(int32_t key) {
