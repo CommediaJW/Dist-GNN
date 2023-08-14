@@ -101,6 +101,8 @@ void TensorP2PServer::_Free() {
     }
   }
   nccl::_Barrier();
+
+  CUDAContext::cuda_context.raw_delete(device_ptrs_[local_rank_]);
 }
 
 torch::Tensor TensorP2PServer::GetLocalDeviceTensor() {
