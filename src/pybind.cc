@@ -58,4 +58,6 @@ PYBIND11_MODULE(dgs, m) {
   m_ops.def("_Test_NCCLTensorAllGather", &nccl::NCCLTensorAllGather);
   m_ops.def("_Test_GetLocalRank", &nccl::GetLocalRank);
   m_ops.def("_Test_GetWorldSize", &nccl::GetWorldSize);
+  m_ops.def("_Test_ExtractEdgeData", &sampling::cuda::ExtractEdgeData);
+  m_ops.def("_Test_ExtractIndptr", &sampling::cuda::ExtractIndptr);
 }
