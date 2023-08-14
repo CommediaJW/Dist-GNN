@@ -31,6 +31,7 @@ batch = sampler._CAPI_sample_node_classifiction(seeds, [2, 3], False)
 print(batch)
 del sampler
 
+'''
 sampler_uniform = DistGNN.capi.classes.P2PCacheSampler(indptr, indices,
                                                        torch.tensor([]),
                                                        cache_nids, cpu_nids,
@@ -43,3 +44,4 @@ print(sampler_uniform._CAPI_get_local_cache_hashmap_tensors())
 batch = sampler_uniform._CAPI_sample_node_classifiction(seeds, [2, 3], False)
 print(batch)
 del sampler_uniform
+'''
