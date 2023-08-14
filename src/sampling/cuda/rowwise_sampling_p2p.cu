@@ -5,6 +5,7 @@
 #include "../../common/cuda/cub_function.h"
 #include "../../common/cuda_common.h"
 #include "../../common/dgs_headers.h"
+#include "../../context/context.h"
 #include "../../hashmap/cuda/hashmap.h"
 #include "ops.h"
 
@@ -229,7 +230,7 @@ RowWiseSamplingUniformWithP2PCachingCUDA(
                                   .dtype(cpu_indices.dtype())
                                   .device(torch::kCUDA));
 
-      const uint64_t random_seed = 7777;
+      uint64_t random_seed = dgs::ctx::randn_uint64();
       constexpr int TILE_SIZE = 128 / BLOCK_SIZE;
       if (replace) {
         const dim3 block(BLOCK_SIZE);

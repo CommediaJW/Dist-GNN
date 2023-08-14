@@ -3,6 +3,7 @@
 #include "../../common/cuda/cub_function.h"
 #include "../../common/cuda_common.h"
 #include "../../common/dgs_headers.h"
+#include "../../context/context.h"
 #include "ops.h"
 #include "warpselect/WarpSelect.cuh"
 
@@ -246,7 +247,7 @@ std::tuple<torch::Tensor, torch::Tensor> RowWiseSamplingBiasCUDA(
             nnz,
             torch::TensorOptions().dtype(indices.dtype()).device(torch::kCUDA));
 
-        const uint64_t random_seed = 7777;
+        uint64_t random_seed = dgs::ctx::randn_uint64();
         constexpr int WARP_SIZE = 32;
         constexpr int BLOCK_WARPS = BLOCK_SIZE / WARP_SIZE;
         // constexpr int TILE_SIZE = BLOCK_WARPS * 16;
