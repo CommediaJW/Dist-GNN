@@ -5,7 +5,6 @@
 #include "../common/pin_memory.h"
 #include "../hashmap/cuda/ops.h"
 #include "../nccl/nccl_context.h"
-#include "../nccl/nccl_ops.h"
 #include "cuda/ops.h"
 #include "sampler.h"
 
@@ -89,9 +88,10 @@ std::tuple<torch::Tensor, int> RegisterSharedMemPinnedTensor(
   }
 
   CUDA_CALL(cudaHostRegister(&shmid, sizeof(int), cudaHostRegisterDefault));
-  NCCL_CALL(ncclBroadcast(&shmid, &shmid, 1, ncclInt, 0, nccl::global_comm,
-                          nccl::nccl_stream));
-  nccl::_Barrier();
+  NCCL_CALL(ncclBroadcast(&shmid, &shmid, 1, ncclInt, 0,
+                          nccl::nccl_ctx.global_comm_,
+                          nccl::nccl_ctx.nccl_stream_));
+  nccl::nccl_ctx.Barrier_();
   CUDA_CALL(cudaHostUnregister(&shmid));
 
   buff = (void *)shmat(shmid, nullptr, 0);
@@ -119,7 +119,7 @@ void FreeSharedMemPinnedTensor(torch::Tensor tensor, int shmid, int64_t rank) {
   CUDA_CALL(cudaHostUnregister(mem_ptr));
   int err = shmdt(mem_ptr);
   SHM_CHECK(err);
-  nccl::_Barrier();
+  nccl::nccl_ctx.Barrier_();
   if (rank == 0) {
     int err = shmctl(shmid, IPC_RMID, nullptr);
     SHM_CHECK(err);
@@ -129,9 +129,9 @@ void FreeSharedMemPinnedTensor(torch::Tensor tensor, int shmid, int64_t rank) {
 P2PCacheSampler::P2PCacheSampler(torch::Tensor indptr, torch::Tensor indices,
                                  torch::Tensor probs, torch::Tensor cache_nids,
                                  torch::Tensor cpu_nids, int64_t device_id) {
-  CHECK(device_id == nccl::local_rank);
+  CHECK(device_id == nccl::nccl_ctx.local_rank_);
   this->device_id_ = device_id;
-  int64_t world_size = nccl::world_size;
+  int64_t world_size = nccl::nccl_ctx.world_size_;
   int64_t num_nodes = indptr.numel() - 1;
 
   TensorPinMemory(indptr);
@@ -200,7 +200,7 @@ P2PCacheSampler::P2PCacheSampler(torch::Tensor indptr, torch::Tensor indices,
     std::vector<torch::Tensor> devices_cache_nids;
     int64_t all_cache_nids_num = 0;
     if (world_size > 1) {
-      devices_cache_nids = nccl::NCCLTensorAllGather(cache_nids);
+      devices_cache_nids = nccl::nccl_ctx.NCCLTensorAllGather_(cache_nids);
       torch::Tensor cached_mask = torch::zeros(
           {
               num_nodes,

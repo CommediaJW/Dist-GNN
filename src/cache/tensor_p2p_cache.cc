@@ -10,8 +10,8 @@ namespace cache {
 
 TensorP2PServer::TensorP2PServer(torch::Tensor data) {
   auto device_tensor_shapes = data.sizes();
-  local_rank_ = nccl::local_rank;
-  num_partitions_ = nccl::world_size;
+  local_rank_ = nccl::nccl_ctx.local_rank_;
+  num_partitions_ = nccl::nccl_ctx.world_size_;
 
   device_item_num_ = device_tensor_shapes[0];
   CHECK(device_item_num_ > 0);
@@ -55,11 +55,12 @@ TensorP2PServer::TensorP2PServer(torch::Tensor data) {
     CUDA_CALL(cudaHostRegister(ipc_device_mem_handle_recvbuff,
                                sizeof(cudaIpcMemHandle_t) * num_partitions_,
                                cudaHostRegisterDefault));
-    NCCL_CALL(ncclAllGather(&ipc_device_mem_handle,
-                            ipc_device_mem_handle_recvbuff,
-                            sizeof(cudaIpcMemHandle_t), ncclChar,
-                            nccl::global_comm, nccl::nccl_stream));
-    nccl::_Barrier();
+    NCCL_CALL(ncclAllGather(
+        &ipc_device_mem_handle, ipc_device_mem_handle_recvbuff,
+        sizeof(cudaIpcMemHandle_t), ncclChar, nccl::nccl_ctx.global_comm_,
+        nccl::nccl_ctx.nccl_stream_));
+
+    nccl::nccl_ctx.Barrier_();
     CUDA_CALL(cudaHostUnregister(&ipc_device_mem_handle));
     CUDA_CALL(cudaHostUnregister(ipc_device_mem_handle_recvbuff));
 
@@ -100,7 +101,7 @@ void TensorP2PServer::_Free() {
       }
     }
   }
-  nccl::_Barrier();
+  nccl::nccl_ctx.Barrier_();
 
   CUDAContext::cuda_context.raw_delete(device_ptrs_[local_rank_]);
 }

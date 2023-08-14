@@ -4,5 +4,5 @@ import time
 
 begin = time.time()
 for i in range(10):
-    print(dgs.ops._CAPI_Randn())
+    print(dgs.ops._Test_Randn())
 print(time.time() - begin)
