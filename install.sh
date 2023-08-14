@@ -1,1 +1,1 @@
-CMAKE_BUILD_PARALLEL_LEVEL=16 pip3 install ./python
+CMAKE_BUILD_PARALLEL_LEVEL=$(cat /proc/cpuinfo | grep processor | wc -l) pip3 install ./python
