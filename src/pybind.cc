@@ -8,6 +8,8 @@
 #include "sampling/cuda/ops.h"
 #include "sampling/sampler.h"
 
+#include "context/context.h"
+
 using namespace dgs;
 namespace py = pybind11;
 
@@ -51,4 +53,6 @@ PYBIND11_MODULE(dgs, m) {
            &sampling::cuda::RowWiseSamplingBiasCUDA)
       .def("_CAPI_cuda_sampled_tensor_relabel",
            &sampling::cuda::TensorRelabelCUDA);
+
+  m_ops.def("_CAPI_Randn", &ctx::randn_uint64);
 }

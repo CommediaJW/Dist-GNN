@@ -6,7 +6,7 @@ include_directories("include")
 
 # find python
 find_package(Python 3.6 COMPONENTS Interpreter Development REQUIRED)
-set(PYTHON_INTERP ${Python_EXECUTABLE})
+set(PYTHON_INTERP /home/gpzlx1/DGNN/Dist-GNN/vevnv/bin/python)
 message(STATUS "Using Python interpreter: ${PYTHON_INTERP}")
 
 # find torch
@@ -45,6 +45,7 @@ file(GLOB DGS_SRC
   src/*.cc
   src/cache/*.cc
   src/cache/cuda/*.cu
+  src/context/*.cc
   src/common/*.cc
   src/hashmap/cuda/*.cu
   src/nccl/*.cc
