@@ -29,7 +29,7 @@ sampler = DistGNN.capi.classes.P2PCacheSampler(indptr, indices, torch.Tensor(),
                                                dgs.ops._Test_GetLocalRank())
 
 for i in sampler._CAPI_sample_node_classifiction(
-        torch.tensor([0, 3, 5]).cuda(), [10, 10], False):
+        torch.tensor([0, 3, 5]).cuda(), [2, 2], False):
     if dgs.ops._Test_GetLocalRank() == 0:
         for j in i:
             print(dgs.ops._Test_GetLocalRank(), j)

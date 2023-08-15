@@ -6,7 +6,7 @@ include_directories("include")
 
 # find python
 find_package(Python 3.6 COMPONENTS Interpreter Development REQUIRED)
-set(PYTHON_INTERP /home/gpzlx1/DGNN/Dist-GNN/vevnv/bin/python)
+set(PYTHON_INTERP python)
 message(STATUS "Using Python interpreter: ${PYTHON_INTERP}")
 
 # find torch
