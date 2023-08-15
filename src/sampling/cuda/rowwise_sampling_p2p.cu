@@ -7,6 +7,7 @@
 #include "../../common/dgs_headers.h"
 #include "../../context/context.h"
 #include "../../hashmap/cuda/hashmap.h"
+#include "../../nccl/nccl_context.h"
 #include "ops.h"
 
 #define BLOCK_SIZE 128
@@ -149,14 +150,12 @@ RowWiseSamplingUniformWithP2PCachingCUDA(
     torch::Tensor seeds, cache::TensorP2PServer *gpu_indptr,
     cache::TensorP2PServer *gpu_indices, torch::Tensor gpu_hashmap_key,
     torch::Tensor gpu_hashmap_devid, torch::Tensor gpu_hashmap_idx,
-    torch::Tensor cpu_indptr, torch::Tensor cpu_indices,
-    torch::Tensor cpu_hashmap_key, torch::Tensor cpu_hashmap_idx,
-    int64_t num_picks, bool replace) {
+    torch::Tensor cpu_indptr, torch::Tensor cpu_indices, int64_t num_picks,
+    bool replace) {
   DGS_ID_TYPE_SWITCH(cpu_indptr.dtype(), EType, {
     DGS_ID_TYPE_SWITCH(cpu_indices.dtype(), NType, {
       NType num_items = seeds.numel();
       NType gpu_hashmap_size = gpu_hashmap_key.numel();
-      NType cpu_hashmap_size = cpu_hashmap_key.numel();
 
       cache::tensor_p2p_server_wrapper<EType> *gpu_indptr_wrapper_ptr =
           reinterpret_cast<cache::tensor_p2p_server_wrapper<EType> *>(
@@ -182,22 +181,20 @@ RowWiseSamplingUniformWithP2PCachingCUDA(
       using it = thrust::counting_iterator<NType>;
       thrust::for_each(
           thrust::device, it(0), it(num_items),
-          [seeds = seeds.data_ptr<NType>(), gpu_indptr = gpu_indptr_wrapper_ptr,
+          [seeds = seeds.data_ptr<NType>(),
+           cpu_indptr = cpu_indptr.data_ptr<EType>(),
+           gpu_indptr = gpu_indptr_wrapper_ptr,
            gpu_hashmap_key = gpu_hashmap_key.data_ptr<NType>(),
            gpu_hashmap_devid = gpu_hashmap_devid.data_ptr<NType>(),
            gpu_hashmap_idx = gpu_hashmap_idx.data_ptr<NType>(),
-           cpu_indptr = cpu_indptr.data_ptr<EType>(),
-           cpu_hashmap_key = cpu_hashmap_key.data_ptr<NType>(),
-           cpu_hashmap_idx = cpu_hashmap_idx.data_ptr<NType>(),
            sub_indptr = sub_indptr.data_ptr<EType>(),
            row_begin = row_begin.data_ptr<EType>(),
-           row_end = row_end.data_ptr<EType>(), replace, num_picks,
-           gpu_hashmap_size, cpu_hashmap_size] __device__(int64_t i) mutable {
+           row_end = row_end.data_ptr<EType>(), gpu_hashmap_size, replace,
+           num_picks] __device__(int64_t i) mutable {
             NType nid = seeds[i];
             hashmap::cuda::Hashmap<NType, NType> gpu_table(
                 gpu_hashmap_key, gpu_hashmap_idx, gpu_hashmap_size);
-            hashmap::cuda::Hashmap<NType, NType> cpu_table(
-                cpu_hashmap_key, cpu_hashmap_idx, cpu_hashmap_size);
+
             const NType pos = gpu_table.SearchForPos(nid);
             if (pos != -1) {
               row_begin[i] =
@@ -205,10 +202,8 @@ RowWiseSamplingUniformWithP2PCachingCUDA(
               row_end[i] = gpu_indptr->At(gpu_hashmap_devid[pos],
                                           gpu_hashmap_idx[pos] + 1);
             } else {
-              const NType cpu_pos = cpu_table.SearchForPos(nid);
-              const NType cpu_idx = cpu_hashmap_idx[cpu_pos];
-              row_begin[i] = cpu_indptr[cpu_idx];
-              row_end[i] = cpu_indptr[cpu_idx + 1];
+              row_begin[i] = cpu_indptr[nid];
+              row_end[i] = cpu_indptr[nid + 1];
             }
             if (replace) {
               sub_indptr[i] = (row_end[i] - row_begin[i]) == 0 ? 0 : num_picks;
@@ -235,7 +230,8 @@ RowWiseSamplingUniformWithP2PCachingCUDA(
       if (replace) {
         const dim3 block(BLOCK_SIZE);
         const dim3 grid((num_items + TILE_SIZE - 1) / TILE_SIZE);
-        _CSRRowWiseSampleUniformWithP2PCachingKernel<NType, EType, TILE_SIZE>
+        _CSRRowWiseSampleUniformReplaceWithP2PCachingKernel<NType, EType,
+                                                            TILE_SIZE>
             <<<grid, block>>>(
                 random_seed, num_picks, num_items, gpu_hashmap_size,
                 seeds.data_ptr<NType>(), row_begin.data_ptr<EType>(),
@@ -244,11 +240,11 @@ RowWiseSamplingUniformWithP2PCachingCUDA(
                 gpu_hashmap_key.data_ptr<NType>(),
                 gpu_hashmap_devid.data_ptr<NType>(), coo_row.data_ptr<NType>(),
                 coo_col.data_ptr<NType>());
+
       } else {
         const dim3 block(BLOCK_SIZE);
         const dim3 grid((num_items + TILE_SIZE - 1) / TILE_SIZE);
-        _CSRRowWiseSampleUniformReplaceWithP2PCachingKernel<NType, EType,
-                                                            TILE_SIZE>
+        _CSRRowWiseSampleUniformWithP2PCachingKernel<NType, EType, TILE_SIZE>
             <<<grid, block>>>(
                 random_seed, num_picks, num_items, gpu_hashmap_size,
                 seeds.data_ptr<NType>(), row_begin.data_ptr<EType>(),
