@@ -10,7 +10,6 @@ namespace cache {
 
 TensorP2PServer::TensorP2PServer(torch::Tensor data) {
   CHECK_CUDA(data);
-  local_data_ = data;
 
   auto device_tensor_shapes = data.sizes();
   local_rank_ = nccl::nccl_ctx.local_rank_;
@@ -37,7 +36,11 @@ TensorP2PServer::TensorP2PServer(torch::Tensor data) {
   }
 
   device_cached_size_ = device_item_num_ * item_stride_ * dtype_size_t_;
-  void *uva_device_ptr = data.storage().data();
+  void *uva_device_ptr =
+      CUDAContext::cuda_context.raw_alloc(device_cached_size_);
+  CUDA_CALL(cudaMemcpy(uva_device_ptr,
+                       reinterpret_cast<char *>(data.storage().data()),
+                       device_cached_size_, cudaMemcpyDefault));
   device_ptrs_[local_rank_] = uva_device_ptr;
 
   // CUDA IPC
@@ -101,6 +104,8 @@ void TensorP2PServer::_Free() {
     }
   }
   nccl::nccl_ctx.Barrier_();
+
+  CUDAContext::cuda_context.raw_delete(device_ptrs_[local_rank_]);
 }
 
 torch::Tensor TensorP2PServer::GetLocalDeviceTensor() {

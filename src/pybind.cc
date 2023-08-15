@@ -29,6 +29,12 @@ PYBIND11_MODULE(dgs, m) {
       .def("_CAPI_get_local_cache_hashmap_tensors",
            &sampling::P2PCacheSampler::GetLocalCachedHashTensors);
 
+  py::class_<cache::TensorP2PServer>(m_classes, "TensorP2PServer")
+      .def(py::init<torch::Tensor>())
+      .def("_CAPI_get_device_tensor", &cache::TensorP2PServer::GetDeviceTensor)
+      .def("_CAPI_get_local_device_tensor",
+           &cache::TensorP2PServer::GetLocalDeviceTensor);
+
   // ops
   auto m_ops = m.def_submodule("ops");
   // nccl communicating

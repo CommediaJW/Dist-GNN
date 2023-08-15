@@ -18,7 +18,7 @@ struct tensor_p2p_server_wrapper {
 
   ~tensor_p2p_server_wrapper(){};
 
-  __device__ inline ValueType At(int64_t device_id, int64_t index) {
+  __device__ __forceinline__ ValueType At(int64_t device_id, int64_t index) {
     return reinterpret_cast<ValueType *>(device_ptrs_[device_id])[index];
   }
 };
@@ -31,11 +31,11 @@ struct torch_tensor_wrapper {
 
   ~torch_tensor_wrapper(){};
 
-  __device__ inline ValueType At(uint64_t index) {
+  __device__ __forceinline__ ValueType At(uint64_t index) {
     return reinterpret_cast<ValueType *>(device_ptr_)[index];
   }
 
-  __device__ inline ValueType At(uint32_t index) {
+  __device__ __forceinline__ ValueType At(uint32_t index) {
     return reinterpret_cast<ValueType *>(device_ptr_)[index];
   }
 };
@@ -49,7 +49,6 @@ class TensorP2PServer {
   torch::Tensor GetLocalDeviceTensor();
   torch::Tensor GetDeviceTensor(int64_t device_id, std::vector<int64_t> shapes);
 
-  torch::Tensor local_data_;
   torch::ScalarType dtype_;
   int64_t dtype_size_t_;
 
