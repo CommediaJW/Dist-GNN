@@ -8,37 +8,18 @@
 namespace dgs {
 namespace cache {
 
-inline void *_getTensorVoidDataPtr(torch::Tensor data) {
-  return data.storage().data();
-}
+TensorP2PServer::TensorP2PServer(torch::Tensor data) {
+  CHECK_CUDA(data);
 
-inline size_t _getTensorTypeSizeOf(torch::Dtype type) {
-  if (type == torch::kInt32) {
-    return sizeof(int32_t);
-  } else if (type == torch::kInt64) {
-    return sizeof(int64_t);
-  } else if (type == torch::kFloat) {
-    return sizeof(float);
-  } else if (type == torch::kDouble) {
-    return sizeof(double);
-  } else if (type == torch::kBool) {
-    return sizeof(bool);
-  } else {
-    fprintf(stderr, "Error in _getTensorSizeInByte!\n");
-    exit(-1);
-  }
-}
-
-TensorP2PServer::TensorP2PServer(torch::Tensor tensor) {
-  auto device_tensor_shapes = tensor.sizes();
-  local_rank_ = nccl::local_rank;
-  num_partitions_ = nccl::world_size;
+  auto device_tensor_shapes = data.sizes();
+  local_rank_ = nccl::nccl_ctx.local_rank_;
+  num_partitions_ = nccl::nccl_ctx.world_size_;
 
   device_item_num_ = device_tensor_shapes[0];
   CHECK(device_item_num_ > 0);
 
-  dtype_ = torch::typeMetaToScalarType(tensor.dtype());
-  dtype_size_t_ = _getTensorTypeSizeOf(dtype_);
+  dtype_ = torch::typeMetaToScalarType(data.dtype());
+  dtype_size_t_ = data.element_size();
 
   int64_t stride = 1;
   shapes_.assign(device_tensor_shapes.begin(), device_tensor_shapes.end());
@@ -58,7 +39,7 @@ TensorP2PServer::TensorP2PServer(torch::Tensor tensor) {
   void *uva_device_ptr =
       CUDAContext::cuda_context.raw_alloc(device_cached_size_);
   CUDA_CALL(cudaMemcpy(uva_device_ptr,
-                       reinterpret_cast<char *>(_getTensorVoidDataPtr(tensor)),
+                       reinterpret_cast<char *>(data.storage().data()),
                        device_cached_size_, cudaMemcpyDefault));
   device_ptrs_[local_rank_] = uva_device_ptr;
 
@@ -76,11 +57,12 @@ TensorP2PServer::TensorP2PServer(torch::Tensor tensor) {
     CUDA_CALL(cudaHostRegister(ipc_device_mem_handle_recvbuff,
                                sizeof(cudaIpcMemHandle_t) * num_partitions_,
                                cudaHostRegisterDefault));
-    NCCL_CALL(ncclAllGather(&ipc_device_mem_handle,
-                            ipc_device_mem_handle_recvbuff,
-                            sizeof(cudaIpcMemHandle_t), ncclChar,
-                            nccl::global_comm, nccl::nccl_stream));
-    nccl::_Barrier();
+    NCCL_CALL(ncclAllGather(
+        &ipc_device_mem_handle, ipc_device_mem_handle_recvbuff,
+        sizeof(cudaIpcMemHandle_t), ncclChar, nccl::nccl_ctx.global_comm_,
+        nccl::nccl_ctx.nccl_stream_));
+
+    nccl::nccl_ctx.Barrier_();
     CUDA_CALL(cudaHostUnregister(&ipc_device_mem_handle));
     CUDA_CALL(cudaHostUnregister(ipc_device_mem_handle_recvbuff));
 
@@ -121,7 +103,9 @@ void TensorP2PServer::_Free() {
       }
     }
   }
-  nccl::_Barrier();
+  nccl::nccl_ctx.Barrier_();
+
+  CUDAContext::cuda_context.raw_delete(device_ptrs_[local_rank_]);
 }
 
 torch::Tensor TensorP2PServer::GetLocalDeviceTensor() {

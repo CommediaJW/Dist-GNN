@@ -18,8 +18,25 @@ struct tensor_p2p_server_wrapper {
 
   ~tensor_p2p_server_wrapper(){};
 
-  __device__ inline ValueType At(int64_t device_id, int64_t index) {
+  __device__ __forceinline__ ValueType At(int64_t device_id, int64_t index) {
     return reinterpret_cast<ValueType *>(device_ptrs_[device_id])[index];
+  }
+};
+
+template <typename ValueType>
+struct torch_tensor_wrapper {
+  void *device_ptr_;
+
+  __host__ torch_tensor_wrapper(void *device_ptr) { device_ptr = device_ptr; }
+
+  ~torch_tensor_wrapper(){};
+
+  __device__ __forceinline__ ValueType At(uint64_t index) {
+    return reinterpret_cast<ValueType *>(device_ptr_)[index];
+  }
+
+  __device__ __forceinline__ ValueType At(uint32_t index) {
+    return reinterpret_cast<ValueType *>(device_ptr_)[index];
   }
 };
 
@@ -35,9 +52,8 @@ class TensorP2PServer {
   torch::ScalarType dtype_;
   int64_t dtype_size_t_;
 
-  int64_t num_partitions_;
-
-  int64_t local_rank_;
+  int num_partitions_;
+  int local_rank_;
 
   std::vector<int64_t> strides_;
   std::vector<int64_t> shapes_;

@@ -11,6 +11,7 @@ namespace sampling {
 // seeds, frontiers, coo_row, coo_col
 typedef std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
     NodeClassifictionSampledTensors;
+
 struct NodeClassifictionSampledResult {
   std::vector<NodeClassifictionSampledTensors> structures_;
 
@@ -39,19 +40,11 @@ class P2PCacheSampler {
  private:
   torch::Tensor cpu_indptr_;
   torch::Tensor cpu_indices_;
-  torch::optional<torch::Tensor> cpu_probs_;
-  int cpu_indptr_shmid_ = -1;
-  int cpu_indices_shmid_ = -1;
-  int cpu_probs_shmid_ = -1;
+  torch::optional<torch::Tensor> cpu_probs_ = torch::nullopt;
 
-  torch::Tensor cpu_hashmap_key_;
-  torch::Tensor cpu_hashmap_idx_;
-  int cpu_hashmap_key_shmid_ = -1;
-  int cpu_hashmap_idx_shmid_ = -1;
-
-  cache::TensorP2PServer *gpu_indptr_;
-  cache::TensorP2PServer *gpu_indices_;
-  cache::TensorP2PServer *gpu_probs_;
+  cache::TensorP2PServer *gpu_indptr_ = nullptr;
+  cache::TensorP2PServer *gpu_indices_ = nullptr;
+  cache::TensorP2PServer *gpu_probs_ = nullptr;
 
   torch::Tensor gpu_hashmap_key_;
   torch::Tensor gpu_hashmap_devid_;
@@ -66,13 +59,13 @@ class P2PCacheSampler {
   P2PCacheSampler() {}
   P2PCacheSampler(torch::Tensor indptr, torch::Tensor indices,
                   torch::Tensor probs, torch::Tensor cache_nids,
-                  torch::Tensor cpu_nids, int64_t device_id);
+                  int64_t device_id);
   ~P2PCacheSampler();
   std::vector<NodeClassifictionSampledTensors> NodeClassifictionSample(
       torch::Tensor seeds, std::vector<int64_t> fan_out, bool replace = false);
+
   std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
   GetCPUStructureTensors();
-  std::tuple<torch::Tensor, torch::Tensor> GetCPUHashTensors();
   std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
   GetLocalCachedStructureTensors();
   std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>

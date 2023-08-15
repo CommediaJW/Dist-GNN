@@ -8,8 +8,6 @@ namespace dgs {
 namespace hashmap {
 namespace cuda {
 
-std::tuple<torch::Tensor, torch::Tensor> CreateNidsHashMapCUDA(
-    torch::Tensor input_nids);
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
 CreateNidsP2PCacheHashMapCUDA(std::vector<torch::Tensor> devices_cache_nids,
                               int64_t all_devices_cache_nids_num,
