@@ -33,4 +33,4 @@ p2p_server = DistGNN.capi.classes.TensorP2PServer(sub_indptr)
 if dgs.ops._Test_GetLocalRank() == 0:
     print(p2p_server._CAPI_get_local_device_tensor())
 
-    print(p2p_server._CAPI_get_device_tensor(1, [3]))
+    print(p2p_server._CAPI_get_device_tensor(0))
