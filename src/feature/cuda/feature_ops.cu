@@ -87,7 +87,7 @@ torch::Tensor GetFeaturesP2PCacheCUDA(torch::Tensor nids,
           reinterpret_cast<cache::tensor_p2p_server_wrapper<FloatType> *>(
               gpu_data->wrapper_p2p_server_ptr_);
 
-      int64_t stride = cpu_data.strides()[0];
+      int64_t stride = gpu_data->item_stride_;
 
       torch::Tensor pos_list =
           torch::empty({num_items}, torch::TensorOptions()

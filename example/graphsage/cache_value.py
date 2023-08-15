@@ -51,7 +51,6 @@ def run(rank, world_size, data, args):
 
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats()
-    # print_memory()
 
     # create model
     model = SAGE(graph["features"].shape[1], 256, num_classes, len(fan_out))
