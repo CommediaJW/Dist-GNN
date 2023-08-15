@@ -8,6 +8,8 @@
 namespace dgs {
 namespace nccl {
 
+NCCLContext nccl_ctx;
+
 std::vector<int64_t> GetUniqueId() {
   std::vector<int64_t> unique_id(AlignUp(sizeof(DGSUniqueId), sizeof(int64_t)));
   DGSUniqueId *ptr = (DGSUniqueId *)unique_id.data();
@@ -23,6 +25,8 @@ void SetNCCL(int64_t nranks, std::vector<int64_t> unique_id_array,
 std::vector<torch::Tensor> NCCLTensorAllGather(torch::Tensor local_tensor) {
   return nccl_ctx.NCCLTensorAllGather_(local_tensor);
 }
+
+void Barrier() { nccl_ctx.Barrier_(); }
 
 int GetLocalRank() { return nccl_ctx.local_rank_; }
 int GetWorldSize() { return nccl_ctx.world_size_; }

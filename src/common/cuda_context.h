@@ -14,16 +14,6 @@ class CUDAContext {
   void _decrease(int64_t nbytes) { curr_allocated_ -= nbytes; }
   int64_t GetCurrAllocated() { return curr_allocated_; }
 
-  ~CUDAContext() {
-    for (auto& it : ptr_size_dir_) {
-      void* p = reinterpret_cast<void*>(it.first);
-      int64_t nbytes = it.second;
-      if (nbytes > 0) {
-        raw_delete(p);
-      }
-    }
-  }
-
   void* raw_alloc(int64_t nbytes) {
     void* p = nullptr;
     if (nbytes > 0) {

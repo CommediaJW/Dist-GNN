@@ -19,13 +19,11 @@ PYBIND11_MODULE(dgs, m) {
   // tensor p2p cache manager
   py::class_<sampling::P2PCacheSampler>(m_classes, "P2PCacheSampler")
       .def(py::init<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor,
-                    torch::Tensor, int64_t>())
+                    int64_t>())
       .def("_CAPI_sample_node_classifiction",
            &sampling::P2PCacheSampler::NodeClassifictionSample)
       .def("_CAPI_get_cpu_structure_tensors",
            &sampling::P2PCacheSampler::GetCPUStructureTensors)
-      .def("_CAPI_get_cpu_hashmap_tensors",
-           &sampling::P2PCacheSampler::GetCPUHashTensors)
       .def("_CAPI_get_local_cache_structure_tensors",
            &sampling::P2PCacheSampler::GetLocalCachedStructureTensors)
       .def("_CAPI_get_local_cache_hashmap_tensors",

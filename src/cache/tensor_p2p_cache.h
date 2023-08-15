@@ -49,12 +49,12 @@ class TensorP2PServer {
   torch::Tensor GetLocalDeviceTensor();
   torch::Tensor GetDeviceTensor(int64_t device_id, std::vector<int64_t> shapes);
 
+  torch::Tensor local_data_;
   torch::ScalarType dtype_;
   int64_t dtype_size_t_;
 
-  int64_t num_partitions_;
-
-  int64_t local_rank_;
+  int num_partitions_;
+  int local_rank_;
 
   std::vector<int64_t> strides_;
   std::vector<int64_t> shapes_;

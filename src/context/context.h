@@ -22,7 +22,7 @@ class RandomEngine {
 namespace dgs {
 namespace ctx {
 
-static RandomEngine random_engine;
+extern RandomEngine random_engine;
 uint64_t randn_uint64();
 
 }  // namespace ctx

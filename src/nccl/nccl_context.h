@@ -2,6 +2,7 @@
 #define DGS_NCCL_CONTEXT_H_
 
 #include <nccl.h>
+#include <torch/script.h>
 
 namespace dgs {
 namespace nccl {
@@ -31,7 +32,7 @@ typedef struct {
   ncclUniqueId nccl_unique_id_;
 } DGSUniqueId;
 
-static NCCLContext nccl_ctx;
+extern NCCLContext nccl_ctx;
 
 std::vector<int64_t> GetUniqueId();
 void SetNCCL(int64_t nranks, std::vector<int64_t> unique_id_array,
