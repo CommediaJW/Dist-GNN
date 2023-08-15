@@ -110,21 +110,21 @@ P2PCacheSampler::P2PCacheSampler(torch::Tensor indptr, torch::Tensor indices,
     }
 
     // create hashmap
+    auto tmp_p2p_cache_nids = cache::TensorP2PServer(local_gpu_cache_nids);
     std::vector<torch::Tensor> devices_cache_nids;
     int64_t all_cache_nids_num = 0;
     if (world_size > 1) {
-      devices_cache_nids =
-          nccl::nccl_ctx.NCCLTensorAllGather_(local_gpu_cache_nids);
       torch::Tensor cached_mask =
           torch::zeros(num_nodes, torch::TensorOptions()
                                       .dtype(torch::kBool)
                                       .device(torch::kCUDA, this->device_id_));
       for (int i = 0; i < world_size; i += 1) {
-        cached_mask.index_put_({devices_cache_nids[i]}, true);
+        cached_mask.index_put_({tmp_p2p_cache_nids.GetDeviceTensor(i)}, true);
+        devices_cache_nids.push_back(tmp_p2p_cache_nids.GetDeviceTensor(i));
       }
       all_cache_nids_num = cached_mask.nonzero().numel();
     } else {
-      devices_cache_nids.emplace_back(local_gpu_cache_nids);
+      devices_cache_nids.push_back(local_gpu_cache_nids);
       all_cache_nids_num = local_gpu_cache_nids.numel();
     }
 
