@@ -37,3 +37,16 @@ if dgs.ops._Test_GetLocalRank() == 0:
 
 if dgs.ops._Test_GetLocalRank() == 0:
     print(feature_server._CAPI_get_feature(torch.tensor([0, 3, 5, 7]).cuda()))
+
+import time
+
+time.sleep(2)
+
+if dgs.ops._Test_GetLocalRank() == 1:
+    print(feature_server._CAPI_get_cpu_feature())
+
+if dgs.ops._Test_GetLocalRank() == 1:
+    print(feature_server._CAPI_get_gpu_feature())
+
+if dgs.ops._Test_GetLocalRank() == 1:
+    print(feature_server._CAPI_get_feature(torch.tensor([0, 3, 5, 7]).cuda()))
