@@ -40,24 +40,17 @@ NodeClassifictionSampledResult P2PCacheNodeClassificationSampleBias(
     torch::Tensor cpu_probs, cache::TensorP2PServer *gpu_indptr,
     cache::TensorP2PServer *gpu_indices, cache::TensorP2PServer *gpu_probs,
     torch::Tensor gpu_hashmap_key, torch::Tensor gpu_hashmap_devid,
-    torch::Tensor gpu_hashmap_idx, torch::Tensor cpu_hashmap_key,
-    torch::Tensor cpu_hashmap_idx, std::vector<int64_t> fan_out, bool replace) {
-  /*
+    torch::Tensor gpu_hashmap_idx, std::vector<int64_t> fan_out, bool replace) {
   std::vector<NodeClassifictionSampledTensors> results;
   for (int i = fan_out.size() - 1; i >= 0; i -= 1) {
     torch::Tensor coo_row, coo_col;
     std::tie(coo_row, coo_col) = cuda::RowWiseSamplingBiasWithP2PCachingCUDA(
         seeds, gpu_indptr, gpu_indices, gpu_probs, gpu_hashmap_key,
         gpu_hashmap_devid, gpu_hashmap_idx, cpu_indptr, cpu_indices, cpu_probs,
-        cpu_hashmap_key, cpu_hashmap_idx, fan_out[i], replace);
-    std::vector<torch::Tensor> mapping_tensors;
-    std::vector<torch::Tensor> requiring_relabel_tensors;
-    mapping_tensors.emplace_back(seeds);
-    mapping_tensors.emplace_back(coo_col);
-    requiring_relabel_tensors.emplace_back(coo_row);
-    requiring_relabel_tensors.emplace_back(coo_col);
+        fan_out[i], replace);
+
     auto relabeled =
-        cuda::TensorRelabelCUDA(mapping_tensors, requiring_relabel_tensors);
+        cuda::TensorRelabelCUDA({seeds, coo_col}, {coo_row, coo_col});
     auto frontier = std::get<0>(relabeled);
     auto relabeled_coo_row = std::get<1>(relabeled)[0];
     auto relabeled_coo_col = std::get<1>(relabeled)[1];
@@ -66,7 +59,6 @@ NodeClassifictionSampledResult P2PCacheNodeClassificationSampleBias(
     seeds = frontier;
   }
   return NodeClassifictionSampledResult(results);
-  */
 }
 
 P2PCacheSampler::P2PCacheSampler(torch::Tensor indptr, torch::Tensor indices,
@@ -156,15 +148,13 @@ P2PCacheSampler::NodeClassifictionSample(torch::Tensor seeds,
                                          std::vector<int64_t> fan_out,
                                          bool replace) {
   if (this->bias_) {
-    /*
     return P2PCacheNodeClassificationSampleBias(
-    seeds, this->cpu_indptr_, this->cpu_indices_,
-    this->cpu_probs_.value(), this->gpu_indptr_, this->gpu_indices_,
-    this->gpu_probs_, this->gpu_hashmap_key_,
-    this->gpu_hashmap_devid_, this->gpu_hashmap_idx_,
-    this->cpu_hashmap_key_, this->cpu_hashmap_idx_, fan_out, replace)
-    .to_py();
-    */
+               seeds, this->cpu_indptr_, this->cpu_indices_,
+               this->cpu_probs_.value(), this->gpu_indptr_, this->gpu_indices_,
+               this->gpu_probs_, this->gpu_hashmap_key_,
+               this->gpu_hashmap_devid_, this->gpu_hashmap_idx_, fan_out,
+               replace)
+        .to_py();
   } else {
     return P2PCacheNodeClassificationSampleUniform(
                seeds, this->cpu_indptr_, this->cpu_indices_, this->gpu_indptr_,

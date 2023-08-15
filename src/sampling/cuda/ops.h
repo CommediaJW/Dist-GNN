@@ -30,9 +30,8 @@ std::tuple<torch::Tensor, torch::Tensor> RowWiseSamplingBiasWithP2PCachingCUDA(
     cache::TensorP2PServer *gpu_indices, cache::TensorP2PServer *gpu_probs,
     torch::Tensor gpu_hashmap_key, torch::Tensor gpu_hashmap_devid,
     torch::Tensor gpu_hashmap_idx, torch::Tensor cpu_indptr,
-    torch::Tensor cpu_indices, torch::Tensor cpu_probs,
-    torch::Tensor cpu_hashmap_key, torch::Tensor cpu_hashmap_idx,
-    int64_t num_picks, bool replace);
+    torch::Tensor cpu_indices, torch::Tensor cpu_probs, int64_t num_picks,
+    bool replace);
 
 std::tuple<torch::Tensor, std::vector<torch::Tensor>> TensorRelabelCUDA(
     std::vector<torch::Tensor> mapping_tensors,
