@@ -51,6 +51,7 @@ file(GLOB DGS_SRC
   src/nccl/*.cc
   src/sampling/*.cc
   src/sampling/cuda/*.cu
+  src/feature/*.cc
   src/feature/cuda/*.cu
 )
 pybind11_add_module(dgs ${DGS_SRC})

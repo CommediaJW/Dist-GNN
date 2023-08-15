@@ -54,17 +54,18 @@ __global__ void _IndexKernel(
   while (out_node < last_node) {
     NType pos = pos_list[out_node];
 
-    NType dev_id = gpu_hashmap_devid[pos];
-    NType target_index = gpu_hashmap_idx[pos];
-
-    for (int idx = threadIdx.x; idx < stride; idx += BLOCK_SIZE) {
-      NType output;
-      if (pos == -1) {
-        output = cpu_data[nids[out_node] * stride + idx];
-      } else {
-        output = gpu_data->At(dev_id, target_index * stride + idx);
+    if (pos == -1) {
+      for (int idx = threadIdx.x; idx < stride; idx += BLOCK_SIZE) {
+        out_data[out_node * stride + idx] =
+            cpu_data[nids[out_node] * stride + idx];
       }
-      out_data[out_node] = output;
+    } else {
+      NType dev_id = gpu_hashmap_devid[pos];
+      NType target_index = gpu_hashmap_idx[pos];
+      for (int idx = threadIdx.x; idx < stride; idx += BLOCK_SIZE) {
+        out_data[out_node * stride + idx] =
+            gpu_data->At(dev_id, target_index * stride + idx);
+      }
     }
 
     out_node += 1;
@@ -75,8 +76,8 @@ torch::Tensor GetFeaturesP2PCacheCUDA(torch::Tensor nids,
                                       torch::Tensor cpu_data,
                                       cache::TensorP2PServer *gpu_data,
                                       torch::Tensor gpu_hashmap_key,
-                                      torch::Tensor gpu_hashmap_devid,
-                                      torch::Tensor gpu_hashmap_idx) {
+                                      torch::Tensor gpu_hashmap_idx,
+                                      torch::Tensor gpu_hashmap_devid) {
   DGS_ID_TYPE_SWITCH(gpu_hashmap_key.dtype(), NType, {
     DGS_VALUE_TYPE_SWITCH(cpu_data.dtype(), FloatType, {
       int64_t num_items = nids.numel();
@@ -90,7 +91,7 @@ torch::Tensor GetFeaturesP2PCacheCUDA(torch::Tensor nids,
 
       torch::Tensor pos_list =
           torch::empty({num_items}, torch::TensorOptions()
-                                        .dtype(gpu_hashmap_devid.dtype())
+                                        .dtype(gpu_hashmap_key.dtype())
                                         .device(torch::kCUDA));
 
       using it = thrust::counting_iterator<int64_t>;
@@ -113,7 +114,7 @@ torch::Tensor GetFeaturesP2PCacheCUDA(torch::Tensor nids,
       if (stride == 1) {
         constexpr int TILE_SIZE = 128 / BLOCK_SIZE;
         const dim3 block(BLOCK_SIZE);
-        const dim3 grid((num_items + TILE_SIZE - 1) / TILE_SIZE);
+        const dim3 grid((num_items + BLOCK_SIZE - 1) / BLOCK_SIZE);
         _IndexOneDimKernel<NType, FloatType><<<grid, block>>>(
             num_items, nids.data_ptr<NType>(), cpu_data.data_ptr<FloatType>(),
             gpu_data_wrapper_ptr, pos_list.data_ptr<NType>(),
@@ -122,7 +123,7 @@ torch::Tensor GetFeaturesP2PCacheCUDA(torch::Tensor nids,
       } else {
         constexpr int TILE_SIZE = 128 / BLOCK_SIZE;
         const dim3 block(BLOCK_SIZE);
-        const dim3 grid((num_items + BLOCK_SIZE - 1) / BLOCK_SIZE);
+        const dim3 grid((num_items + TILE_SIZE - 1) / TILE_SIZE);
         _IndexKernel<NType, FloatType, TILE_SIZE><<<grid, block>>>(
             num_items, stride, nids.data_ptr<NType>(),
             cpu_data.data_ptr<FloatType>(), gpu_data_wrapper_ptr,

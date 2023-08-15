@@ -17,7 +17,7 @@ create_communicator(dist.get_world_size(), dist.get_rank())
 print("rank: {}/{}".format(dgs.ops._Test_GetLocalRank(),
                            dgs.ops._Test_GetWorldSize()))
 
-feature = torch.arange(0, 100, 1).float()  #.reshape(10, 10)
+feature = torch.arange(0, 100, 1).float().pin_memory().reshape(10, 10)
 
 # print(feature)
 
