@@ -4,6 +4,7 @@
 #include "cache/cuda/ops.h"
 #include "common/pin_memory.h"
 #include "feature/cuda/ops.h"
+#include "feature/feature_sever.h"
 #include "nccl/nccl_context.h"
 #include "sampling/cuda/ops.h"
 #include "sampling/sampler.h"
@@ -29,6 +30,14 @@ PYBIND11_MODULE(dgs, m) {
       .def("_CAPI_get_local_cache_hashmap_tensors",
            &sampling::P2PCacheSampler::GetLocalCachedHashTensors);
 
+  py::class_<feature::P2PCacheFeatureServer>(m_classes, "P2PCacheFeatureServer")
+      .def(py::init<torch::Tensor, torch::Tensor, int64_t>())
+      .def("_CAPI_get_cpu_feature",
+           &feature::P2PCacheFeatureServer::GetCPUFeature)
+      .def("_CAPI_get_gpu_feature",
+           &feature::P2PCacheFeatureServer::GetGPUFeature)
+      .def("_CAPI_get_feature", &feature::P2PCacheFeatureServer::GetFeatures);
+
   py::class_<cache::TensorP2PServer>(m_classes, "TensorP2PServer")
       .def(py::init<torch::Tensor>())
       .def("_CAPI_get_device_tensor", &cache::TensorP2PServer::GetDeviceTensor)
@@ -47,8 +56,7 @@ PYBIND11_MODULE(dgs, m) {
   // tensor pin memory
   m_ops.def("_CAPI_tensor_pin_memory", &TensorPinMemory)
       .def("_CAPI_tensor_unpin_memory", &TensorUnpinMemory);
-  // cuda tensor index
-  m_ops.def("_CAPI_cuda_index", &feature::cuda::IndexCUDA);
+
   // cuda sampling
   m_ops
       .def("_CAPI_cuda_sample_neighbors",
