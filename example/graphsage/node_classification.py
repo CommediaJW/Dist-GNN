@@ -123,7 +123,7 @@ def run(rank, world_size, data, args):
     if args.bias:
         probs = graph["probs"]
     else:
-        probs = torch.tensor()
+        probs = torch.Tensor()
 
     # cache
     torch.cuda.empty_cache()

@@ -14,7 +14,7 @@ P2PCacheFeatureServer::P2PCacheFeatureServer(torch::Tensor data,
   CHECK(device_id == nccl::nccl_ctx.local_rank_);
   this->device_id_ = device_id;
   int64_t world_size = nccl::nccl_ctx.world_size_;
-  int64_t num_nodes = data.numel();
+  int64_t num_items = data.size(0);
 
   // cpu data
   this->cpu_features_ = data;
@@ -41,7 +41,7 @@ P2PCacheFeatureServer::P2PCacheFeatureServer(torch::Tensor data,
     if (world_size > 1) {
       devices_cache_nids = nccl::nccl_ctx.NCCLTensorAllGather_(cache_nids);
       torch::Tensor cached_mask =
-          torch::zeros(num_nodes, torch::TensorOptions()
+          torch::zeros(num_items, torch::TensorOptions()
                                       .dtype(torch::kBool)
                                       .device(torch::kCUDA, this->device_id_));
       for (int i = 0; i < world_size; i += 1) {

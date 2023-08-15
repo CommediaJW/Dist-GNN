@@ -74,6 +74,15 @@ TensorP2PServer::TensorP2PServer(torch::Tensor data) {
     }
   }
 
+  // get All tensor size
+  torch::Tensor device_items = torch::full(
+      {1}, device_item_num_,
+      torch::TensorOptions().dtype(torch::kInt64).device(torch::kCUDA));
+  auto all_device_items = nccl::NCCLTensorAllGather(device_items);
+  for (auto i : all_device_items) {
+    device_items_.push_back(i.item<int64_t>());
+  }
+
   // create wrapper
   wrapper_device_ptrs_ = reinterpret_cast<void **>(
       CUDAContext::cuda_context.raw_alloc(sizeof(void *) * num_partitions_));
@@ -115,10 +124,9 @@ torch::Tensor TensorP2PServer::GetLocalDeviceTensor() {
   return ret;
 }
 
-torch::Tensor TensorP2PServer::GetDeviceTensor(int64_t device_id,
-                                               std::vector<int64_t> shapes) {
+torch::Tensor TensorP2PServer::GetDeviceTensor(int64_t device_id) {
   torch::Tensor ret = torch::from_blob(
-      device_ptrs_[device_id], shapes,
+      device_ptrs_[device_id], device_items_[device_id] * item_stride_,
       torch::TensorOptions().dtype(dtype_).device(torch::kCUDA));
   return ret;
 }

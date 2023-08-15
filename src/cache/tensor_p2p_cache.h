@@ -47,7 +47,7 @@ class TensorP2PServer {
   ~TensorP2PServer() { _Free(); }
 
   torch::Tensor GetLocalDeviceTensor();
-  torch::Tensor GetDeviceTensor(int64_t device_id, std::vector<int64_t> shapes);
+  torch::Tensor GetDeviceTensor(int64_t device_id);
 
   torch::ScalarType dtype_;
   int64_t dtype_size_t_;
@@ -62,6 +62,7 @@ class TensorP2PServer {
   int64_t device_item_num_;
   int64_t device_cached_size_;
 
+  std::vector<int64_t> device_items_;
   thrust::host_vector<void *> device_ptrs_;
   void **wrapper_device_ptrs_ = nullptr;
   void *wrapper_p2p_server_ptr_ = nullptr;
