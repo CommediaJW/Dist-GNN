@@ -13,6 +13,8 @@ create_communicator(dist.get_world_size(), dist.get_rank())
 
 indptr = torch.tensor([0, 4, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10]).pin_memory()
 indices = torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).pin_memory()
+probs = torch.tensor([0.1, 0.2, 0.3, 0.4, 0.5, 0.1, 0.2, 0.3, 0.4,
+                      0.5]).pin_memory()
 
 if dgs.ops._Test_GetLocalRank() == 0:
     cache_nids = torch.tensor([0, 3])
@@ -22,7 +24,7 @@ elif dgs.ops._Test_GetLocalRank() == 1:
 print("rank: {}/{}".format(dgs.ops._Test_GetLocalRank(),
                            dgs.ops._Test_GetWorldSize()))
 
-sampler = DistGNN.capi.classes.P2PCacheSampler(indptr, indices, torch.Tensor(),
+sampler = DistGNN.capi.classes.P2PCacheSampler(indptr, indices, probs,
                                                cache_nids,
                                                dgs.ops._Test_GetLocalRank())
 
