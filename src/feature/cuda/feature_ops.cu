@@ -10,7 +10,7 @@ namespace feature {
 namespace cuda {
 
 template <typename NType, typename FloatType>
-__global__ void _IndexOneDimKernel(
+__global__ void _IndexOneDimP2PCacheKernel(
     const int64_t num_nids, const NType *__restrict__ const nids,
     const FloatType *__restrict__ const cpu_data,
     cache::tensor_p2p_server_wrapper<FloatType> *__restrict__ gpu_data,
@@ -36,7 +36,7 @@ __global__ void _IndexOneDimKernel(
 }
 
 template <typename NType, typename FloatType, int TILE_SIZE>
-__global__ void _IndexKernel(
+__global__ void _IndexP2PCacheKernel(
     const int64_t num_nids, const int64_t stride,
     const NType *__restrict__ const nids,
     const FloatType *__restrict__ const cpu_data,
@@ -115,7 +115,7 @@ torch::Tensor GetFeaturesP2PCacheCUDA(torch::Tensor nids,
         constexpr int TILE_SIZE = 128 / BLOCK_SIZE;
         const dim3 block(BLOCK_SIZE);
         const dim3 grid((num_items + BLOCK_SIZE - 1) / BLOCK_SIZE);
-        _IndexOneDimKernel<NType, FloatType><<<grid, block>>>(
+        _IndexOneDimP2PCacheKernel<NType, FloatType><<<grid, block>>>(
             num_items, nids.data_ptr<NType>(), cpu_data.data_ptr<FloatType>(),
             gpu_data_wrapper_ptr, pos_list.data_ptr<NType>(),
             gpu_hashmap_idx.data_ptr<NType>(),
@@ -124,7 +124,7 @@ torch::Tensor GetFeaturesP2PCacheCUDA(torch::Tensor nids,
         constexpr int TILE_SIZE = 128 / BLOCK_SIZE;
         const dim3 block(BLOCK_SIZE);
         const dim3 grid((num_items + TILE_SIZE - 1) / TILE_SIZE);
-        _IndexKernel<NType, FloatType, TILE_SIZE><<<grid, block>>>(
+        _IndexP2PCacheKernel<NType, FloatType, TILE_SIZE><<<grid, block>>>(
             num_items, stride, nids.data_ptr<NType>(),
             cpu_data.data_ptr<FloatType>(), gpu_data_wrapper_ptr,
             pos_list.data_ptr<NType>(), gpu_hashmap_idx.data_ptr<NType>(),
@@ -134,6 +134,78 @@ torch::Tensor GetFeaturesP2PCacheCUDA(torch::Tensor nids,
       return ret;
     });
   });
+  return torch::Tensor();
+}
+
+template <typename NType, typename FloatType>
+__global__ void _IndexOneDimKernel(const int64_t num_nids,
+                                   const NType *__restrict__ const in_nids,
+                                   const FloatType *__restrict__ const data,
+                                   FloatType *__restrict__ const out_data) {
+  assert(blockDim.x == BLOCK_SIZE);
+
+  int64_t out_node = blockIdx.x * blockDim.x + threadIdx.x;
+  if (out_node < num_nids) {
+    out_data[out_node] = data[in_nids[out_node]];
+  }
+}
+
+template <typename NType, typename FloatType, int TILE_SIZE>
+__global__ void _IndexKernel(const int64_t num_nids, const int64_t stride,
+                             const NType *__restrict__ const in_nids,
+                             const FloatType *__restrict__ const data,
+                             FloatType *__restrict__ const out_data) {
+  assert(blockDim.x == BLOCK_SIZE);
+
+  int64_t out_node = blockIdx.x * TILE_SIZE;
+  const int64_t last_node =
+      min(static_cast<int64_t>(blockIdx.x + 1) * TILE_SIZE, num_nids);
+
+  while (out_node < last_node) {
+    for (int idx = threadIdx.x; idx < stride; idx += BLOCK_SIZE) {
+      out_data[out_node * stride + idx] =
+          data[in_nids[out_node] * stride + idx];
+    }
+    out_node += 1;
+  }
+}
+
+torch::Tensor GetFeaturesCUDA(torch::Tensor data, torch::Tensor nid) {
+  DGS_ID_TYPE_SWITCH(nid.dtype(), NType, {
+    DGS_VALUE_TYPE_SWITCH(data.dtype(), FloatType, {
+      int64_t num_items = nid.numel();
+
+      int64_t stride = 1;
+      for (int i = 1; i < data.sizes().size(); i += 1) {
+        stride *= data.sizes()[i];
+      }
+      std::vector<int64_t> buff_shape;
+      buff_shape.resize(data.sizes().size());
+      buff_shape.assign(data.sizes().begin(), data.sizes().end());
+      buff_shape[0] = num_items;
+      torch::Tensor data_buff = torch::empty(
+          buff_shape,
+          torch::TensorOptions().dtype(data.dtype()).device(torch::kCUDA));
+
+      if (stride > 1) {
+        constexpr int TILE_SIZE = 128 / BLOCK_SIZE;
+        const dim3 block(BLOCK_SIZE);
+        const dim3 grid((num_items + TILE_SIZE - 1) / TILE_SIZE);
+        _IndexKernel<NType, FloatType, TILE_SIZE><<<grid, block>>>(
+            num_items, stride, nid.data_ptr<NType>(),
+            data.data_ptr<FloatType>(), data_buff.data_ptr<FloatType>());
+      } else if (stride == 1) {
+        const dim3 block(BLOCK_SIZE);
+        const dim3 grid((num_items + BLOCK_SIZE - 1) / BLOCK_SIZE);
+        _IndexOneDimKernel<NType, FloatType><<<grid, block>>>(
+            num_items, nid.data_ptr<NType>(), data.data_ptr<FloatType>(),
+            data_buff.data_ptr<FloatType>());
+      }
+
+      return data_buff;
+    });
+  });
+
   return torch::Tensor();
 }
 

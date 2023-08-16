@@ -161,8 +161,8 @@ def run(rank, world_size, data, args):
             loading_start = time.time()
             batch_inputs = feature_server._CAPI_get_feature(
                 blocks[0].srcdata[dgl.NID])
-            batch_labels = torch.index_select(graph["labels"], 0,
-                                              seed_nids.cpu()).cuda()
+            batch_labels = DistGNN.capi.ops._CAPI_cuda_index_select(
+                graph["labels"], seed_nids)
             torch.cuda.synchronize()
             loading_end = time.time()
 

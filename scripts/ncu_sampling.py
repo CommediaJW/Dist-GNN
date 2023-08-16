@@ -18,11 +18,12 @@ def run(graph, args):
         indices = graph["indices"]
         DistGNN.capi.ops._CAPI_tensor_pin_memory(indices)
 
-    if args.probs_device == "gpu" and args.bias:
-        probs = graph["probs"].cuda()
-    else:
-        probs = graph["probs"]
-        DistGNN.capi.ops._CAPI_tensor_pin_memory(probs)
+    if args.bias:
+        if args.probs_device == "gpu":
+            probs = graph["probs"].cuda()
+        else:
+            probs = graph["probs"]
+            DistGNN.capi.ops._CAPI_tensor_pin_memory(probs)
 
     graph_node_num = indptr.numel() - 1
     seeds = torch.randint(0, graph_node_num,

@@ -15,7 +15,7 @@ def run(features, args):
 
     torch.cuda.synchronize()
     torch.cuda.nvtx.range_push("loading")
-    _ = DistGNN.capi.ops._CAPI_cuda_index(features, nids)
+    _ = DistGNN.capi.ops._CAPI_cuda_index_select(features, nids)
     torch.cuda.synchronize()
     torch.cuda.nvtx.range_pop()
 

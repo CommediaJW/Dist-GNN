@@ -14,6 +14,7 @@ torch::Tensor GetFeaturesP2PCacheCUDA(torch::Tensor nids,
                                       torch::Tensor gpu_hashmap_key,
                                       torch::Tensor gpu_hashmap_devid,
                                       torch::Tensor gpu_hashmap_idx);
+torch::Tensor GetFeaturesCUDA(torch::Tensor data, torch::Tensor nid);
 
 }  // namespace cuda
 }  // namespace feature

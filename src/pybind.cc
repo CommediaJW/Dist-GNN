@@ -66,6 +66,9 @@ PYBIND11_MODULE(dgs, m) {
       .def("_CAPI_cuda_sampled_tensor_relabel",
            &sampling::cuda::TensorRelabelCUDA);
 
+  // cuda feature loading
+  m_ops.def("_CAPI_cuda_index_select", &feature::cuda::GetFeaturesCUDA);
+
   m_ops.def("_Test_Randn", &ctx::randn_uint64);
   m_ops.def("_Test_NCCLTensorAllGather", &nccl::NCCLTensorAllGather);
   m_ops.def("_Test_GetLocalRank", &nccl::GetLocalRank);
