@@ -229,9 +229,10 @@ if __name__ == '__main__':
                         action='store_true',
                         default=False,
                         help="Sample with bias.")
-    parser.add_argument("--dataset",
-                        default="ogbn-papers100M",
-                        choices=["ogbn-products", "ogbn-papers100M"])
+    parser.add_argument(
+        "--dataset",
+        default="ogbn-papers100M",
+        choices=["ogbn-products", "ogbn-papers100M", "ogbn-papers400M"])
     parser.add_argument("--cache-policy",
                         default="selfish",
                         choices=["selfish", "selfless"],
@@ -244,10 +245,7 @@ if __name__ == '__main__':
 
     torch.manual_seed(1)
 
-    if args.dataset == "ogbn-products":
-        graph, num_classes = load_dataset(args.root, "ogbn-products")
-    elif args.dataset == "ogbn-papers100M":
-        graph, num_classes = load_dataset(args.root, "ogbn-papers100M")
+    graph, num_classes = load_dataset(args.root, args.dataset)
 
     if args.bias:
         graph["probs"] = torch.randn(
