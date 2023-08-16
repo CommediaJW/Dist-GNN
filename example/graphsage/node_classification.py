@@ -90,33 +90,44 @@ def run(rank, world_size, data, args):
     sampling_read_bytes_host = 480
     feature_read_bytes_gpu = 480
     feature_read_bytes_host = 512
-    sampling_cache_nids_selfish, feature_cache_nids_selfish = get_cache_nids_selfish(
-        graph,
-        sampling_heat,
-        feature_heat,
-        available_mem,
-        bandwidth_gpu,
-        sampling_read_bytes_gpu,
-        feature_read_bytes_gpu,
-        bandwidth_host,
-        sampling_read_bytes_host,
-        feature_read_bytes_host,
-        probs=probs_key)
+    if args.cache_policy == "selfish":
+        sampling_cache_nids, feature_cache_nids = get_cache_nids_selfish(
+            graph,
+            sampling_heat,
+            feature_heat,
+            available_mem,
+            bandwidth_gpu,
+            sampling_read_bytes_gpu,
+            feature_read_bytes_gpu,
+            bandwidth_host,
+            sampling_read_bytes_host,
+            feature_read_bytes_host,
+            probs=probs_key)
+    else:
+        sampling_cache_nids, feature_cache_nids = get_cache_nids_selfless(
+            graph,
+            sampling_heat,
+            feature_heat,
+            available_mem,
+            bandwidth_gpu,
+            sampling_read_bytes_gpu,
+            feature_read_bytes_gpu,
+            bandwidth_host,
+            sampling_read_bytes_host,
+            feature_read_bytes_host,
+            probs=probs_key)
 
     print(
-        "GPU {}, selfish sampling cache nids num = {}, cache size = {:.2f} GB".
-        format(
-            rank, sampling_cache_nids_selfish.numel(),
+        "GPU {}, sampling cache nids num = {}, cache size = {:.2f} GB".format(
+            rank, sampling_cache_nids.numel(),
             torch.sum(
                 get_structure_space(
-                    sampling_cache_nids_selfish, graph, probs=probs_key)) /
-            1024 / 1024 / 1024))
-    print(
-        "GPU {}, selfish feature cache nids num = {}, cache size = {:.2f} GB".
-        format(
-            rank, feature_cache_nids_selfish.numel(),
-            get_feature_space(graph) * feature_cache_nids_selfish.numel() /
-            1024 / 1024 / 1024))
+                    sampling_cache_nids, graph, probs=probs_key)) / 1024 /
+            1024 / 1024))
+    print("GPU {}, feature cache nids num = {}, cache size = {:.2f} GB".format(
+        rank, feature_cache_nids.numel(),
+        get_feature_space(graph) * feature_cache_nids.numel() / 1024 / 1024 /
+        1024))
 
     for key in graph:
         DistGNN.capi.ops._CAPI_tensor_pin_memory(graph[key])
@@ -127,13 +138,13 @@ def run(rank, world_size, data, args):
 
     # cache
     torch.cuda.empty_cache()
-    sampler = DistGNN.capi.classes.P2PCacheSampler(
-        graph["indptr"], graph["indices"], probs, sampling_cache_nids_selfish,
-        rank)
+    sampler = DistGNN.capi.classes.P2PCacheSampler(graph["indptr"],
+                                                   graph["indices"], probs,
+                                                   sampling_cache_nids, rank)
 
     torch.cuda.empty_cache()
     feature_server = DistGNN.capi.classes.P2PCacheFeatureServer(
-        graph["features"], feature_cache_nids_selfish, rank)
+        graph["features"], feature_cache_nids, rank)
 
     dist.barrier()
     if rank == 0:
@@ -221,6 +232,10 @@ if __name__ == '__main__':
     parser.add_argument("--dataset",
                         default="ogbn-papers100M",
                         choices=["ogbn-products", "ogbn-papers100M"])
+    parser.add_argument("--cache-policy",
+                        default="selfish",
+                        choices=["selfish", "selfless"],
+                        type=str)
     args = parser.parse_args()
 
     n_procs = min(args.num_gpu, torch.cuda.device_count())
