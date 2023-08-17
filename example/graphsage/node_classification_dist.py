@@ -7,6 +7,7 @@ import torch.optim as optim
 import torch.distributed as dist
 import time
 import numpy as np
+import os
 from utils.models import SAGE
 
 import DistGNN
@@ -28,15 +29,18 @@ def build_blocks(batch):
     return blocks
 
 
-def run(rank, world_size, data, args):
+def run(rank, group_size, data, args):
     graph, num_classes, train_nids_list = data
-
     torch.cuda.set_device(rank)
+
+    global_world_size = group_size * args.node_world_size
+    global_rank = rank + args.node_rank * args.node_world_size
+
     dist.init_process_group('nccl',
-                            'tcp://127.0.0.1:12347',
-                            world_size=world_size,
-                            rank=rank)
-    create_communicator(world_size)
+                            world_size=global_world_size,
+                            rank=global_rank)
+    local_group, groups = dist.new_subgroups(group_size)
+    create_communicator(group_size, group=local_group)
 
     fan_out = [int(fanout) for fanout in args.fan_out.split(',')]
     train_nids = torch.from_numpy(train_nids_list[rank])
@@ -126,7 +130,8 @@ def run(rank, world_size, data, args):
             bandwidth_host,
             sampling_read_bytes_host,
             feature_read_bytes_host,
-            probs=probs_key)
+            probs=probs_key,
+            group=local_group)
         if args.cache_policy == "selfless":
             sampling_cache_nids = sampling_cache_nids_selfless
             feature_cache_nids = feature_cache_nids_selfless
@@ -139,19 +144,20 @@ def run(rank, world_size, data, args):
                 feature_cache_nids_selfless,
                 bandwidth_gpu,
                 bandwidth_nvlink,
-                world_size,
+                args.num_gpu,
                 sampling_read_bytes_gpu,
                 feature_read_bytes_gpu,
                 bandwidth_host,
                 sampling_read_bytes_host,
                 feature_read_bytes_host,
-                probs=probs_key)
+                probs=probs_key,
+                group=local_group)
 
     if args.cache_policy == "auto":
         selfish_value = torch.tensor([selfish_total_value], device="cuda")
         selfless_value = torch.tensor([selfless_total_value], device="cuda")
-        dist.all_reduce(selfish_value, dist.ReduceOp.SUM)
-        dist.all_reduce(selfless_value, dist.ReduceOp.SUM)
+        dist.all_reduce(selfish_value, dist.ReduceOp.SUM, group=local_group)
+        dist.all_reduce(selfless_value, dist.ReduceOp.SUM, group=local_group)
         if rank == 0:
             print("Total selfish value = {:.2f}".format(
                 selfish_value[0].item()))
@@ -168,7 +174,7 @@ def run(rank, world_size, data, args):
             if rank == 0:
                 print("Choose selfless cache strategy...")
 
-    dist.barrier()
+    dist.barrier(group=local_group)
 
     print(
         "GPU {}, sampling cache nids num = {}, cache size = {:.2f} GB".format(
@@ -262,6 +268,9 @@ def run(rank, world_size, data, args):
     for key in graph:
         DistGNN.capi.ops._CAPI_tensor_unpin_memory(graph[key])
 
+    for group in groups:
+        dist.destroy_process_group(group)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -297,14 +306,15 @@ if __name__ == '__main__':
                         type=str)
     args = parser.parse_args()
 
-    n_procs = min(args.num_gpu, torch.cuda.device_count())
-    args.num_gpu = n_procs
+    args.node_world_size = int(os.environ["WORLD_SIZE"])
+    args.node_rank = int(os.environ["RANK"])
+
+    args.num_gpu = min(args.num_gpu, torch.cuda.device_count())
     print(args)
 
     torch.manual_seed(1)
 
     graph, num_classes = load_dataset(args.root, args.dataset)
-
     if args.bias:
         if args.probs_path is not None:
             probs = torch.load(args.probs_path)
@@ -316,16 +326,18 @@ if __name__ == '__main__':
 
     # partition train nodes
     train_nids = graph.pop("train_idx")
-
+    total_gpu_num = args.node_world_size * args.num_gpu
     train_nids = train_nids[torch.randperm(train_nids.shape[0])]
-    num_train_nids_per_gpu = (train_nids.shape[0] + n_procs - 1) // n_procs
+    num_train_nids_per_gpu = (train_nids.shape[0] + total_gpu_num -
+                              1) // total_gpu_num
     print("#train nodes {} | #train nodes per gpu {}".format(
         train_nids.shape[0], num_train_nids_per_gpu))
     train_nids_list = []
-    for device in range(n_procs):
-        local_train_nids = train_nids[device *
-                                      num_train_nids_per_gpu:(device + 1) *
-                                      num_train_nids_per_gpu]
+    for device in range(args.num_gpu):
+        local_train_nids = train_nids[
+            (args.node_rank * args.num_gpu + device) *
+            num_train_nids_per_gpu:(args.node_rank * args.num_gpu + device +
+                                    1) * num_train_nids_per_gpu]
         train_nids_list.append(local_train_nids.numpy())
 
     graph["labels"] = graph["labels"].long()
@@ -333,4 +345,4 @@ if __name__ == '__main__':
     data = graph, num_classes, train_nids_list
 
     import torch.multiprocessing as mp
-    mp.spawn(run, args=(n_procs, data, args), nprocs=n_procs)
+    mp.spawn(run, args=(args.num_gpu, data, args), nprocs=args.num_gpu)

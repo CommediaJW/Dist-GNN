@@ -65,24 +65,26 @@ def get_hot_nids_local(sampling_heat: torch.Tensor,
 def get_hot_nids_p2p_global(sampling_heat: torch.Tensor,
                             feature_heat: torch.Tensor,
                             group=None):
-    rank = dist.get_rank(group)
-    world_size = dist.get_world_size(group)
-    if rank == 0:
+    group_size = dist.get_world_size(group)
+    group_rank = dist.get_rank(group)
+    global_group_root = dist.get_rank() - dist.get_rank() % group_size
+
+    if group_rank == 0:
         sampling_heat_list = [
             torch.zeros_like(sampling_heat, device="cuda")
-            for _ in range(world_size)
+            for _ in range(group_size)
         ]
         feature_heat_list = [
             torch.zeros_like(feature_heat, device="cuda")
-            for _ in range(world_size)
+            for _ in range(group_size)
         ]
     else:
         sampling_heat_list = None
         feature_heat_list = None
-    dist.gather(sampling_heat, sampling_heat_list, 0, group)
-    dist.gather(feature_heat, feature_heat_list, 0, group)
+    dist.gather(sampling_heat, sampling_heat_list, global_group_root, group)
+    dist.gather(feature_heat, feature_heat_list, global_group_root, group)
 
-    if rank == 0:
+    if group_rank == 0:
         sampling_heat_list = torch.stack(sampling_heat_list)
         feature_heat_list = torch.stack(feature_heat_list)
 
@@ -96,7 +98,7 @@ def get_hot_nids_p2p_global(sampling_heat: torch.Tensor,
         feature_scatter_list = []
         sampling_tensor_size_scatter_list = []
         feature_tensor_size_scatter_list = []
-        for i in range(world_size):
+        for i in range(group_size):
             sampling_scatter_list.append(
                 torch.argwhere(sampling_gpu_ids == i).flatten())
             feature_scatter_list.append(
@@ -118,18 +120,20 @@ def get_hot_nids_p2p_global(sampling_heat: torch.Tensor,
     feature_nids_tensor_size = torch.tensor([0], device="cuda")
 
     dist.scatter(sampling_nids_tensor_size, sampling_tensor_size_scatter_list,
-                 0, group)
-    dist.scatter(feature_nids_tensor_size, feature_tensor_size_scatter_list, 0,
-                 group)
+                 global_group_root, group)
+    dist.scatter(feature_nids_tensor_size, feature_tensor_size_scatter_list,
+                 global_group_root, group)
 
-    if rank == 0:
-        for i in range(world_size):
+    if group_rank == 0:
+        for i in range(group_size):
             if i == 0:
                 sampling_nids = sampling_scatter_list[0]
                 feature_nids = feature_scatter_list[0]
             else:
-                dist.send(sampling_scatter_list[i], i, group)
-                dist.send(feature_scatter_list[i], i, group)
+                dist.send(sampling_scatter_list[i], global_group_root + i,
+                          group)
+                dist.send(feature_scatter_list[i], global_group_root + i,
+                          group)
     else:
         sampling_nids = torch.zeros((sampling_nids_tensor_size[0].item(), ),
                                     dtype=torch.int64,
@@ -137,8 +141,8 @@ def get_hot_nids_p2p_global(sampling_heat: torch.Tensor,
         feature_nids = torch.zeros((feature_nids_tensor_size[0].item(), ),
                                    dtype=torch.int64,
                                    device="cuda")
-        dist.recv(sampling_nids, 0, group)
-        dist.recv(feature_nids, 0, group)
+        dist.recv(sampling_nids, global_group_root, group)
+        dist.recv(feature_nids, global_group_root, group)
 
     sampling_nids = sampling_nids[sampling_heat[sampling_nids] > 0]
     feature_nids = feature_nids[feature_heat[feature_nids] > 0]
@@ -347,7 +351,7 @@ def compute_total_value_selfless(graph,
                                  feature_cache_nids,
                                  bandwidth_gpu,
                                  bandwidth_nvlink,
-                                 num_nvlink,
+                                 num_gpu,
                                  sampling_read_bytes_gpu,
                                  feature_read_bytes_gpu,
                                  bandwidth_host,
@@ -356,7 +360,7 @@ def compute_total_value_selfless(graph,
                                  probs: str = None,
                                  group=None):
 
-    bandwidth_local = bandwidth_gpu - (num_nvlink - 1) * bandwidth_nvlink
+    bandwidth_local = bandwidth_gpu - (num_gpu - 1) * bandwidth_nvlink
     local_value = compute_total_value_selfish(graph,
                                               sampling_heat,
                                               feature_heat,
