@@ -8,6 +8,8 @@ from dgl.base import DGLError
 from dgl.utils import pin_memory_inplace
 from dgl.multiprocessing import shared_tensor
 import tqdm
+import numpy as np
+from contextlib import contextmanager
 
 
 # This function has been removed in dgl 0.9
@@ -93,3 +95,84 @@ class SAGE(nn.Module):
                 # remove the intermediate data from the graph
                 g.ndata.pop('h')
         return y
+
+
+class DistSAGE(nn.Module):
+
+    def __init__(self, in_feats, n_hidden, n_classes, num_layers):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        for l in range(num_layers):
+            if l == 0:
+                in_dim = in_feats
+            else:
+                in_dim = n_hidden
+            if l == num_layers - 1:
+                out_dim = n_classes
+            else:
+                out_dim = n_hidden
+            self.layers.append(dglnn.SAGEConv(in_dim, out_dim, 'mean'))
+        self.dropout = nn.Dropout(0.5)
+        self.n_hidden = n_hidden
+        self.n_classes = n_classes
+
+    def forward(self, blocks, x):
+        h = x
+        for i, (layer, block) in enumerate(zip(self.layers, blocks)):
+            h = layer(block, h)
+            if i != len(self.layers) - 1:
+                h = F.relu(h)
+                h = self.dropout(h)
+        return h
+
+    def inference(self, g, x, batch_size, device):
+        nodes = dgl.distributed.node_split(
+            np.arange(g.num_nodes()),
+            g.get_partition_book(),
+            force_even=True,
+        )
+        y = dgl.distributed.DistTensor(
+            (g.num_nodes(), self.n_hidden),
+            torch.float32,
+            "h",
+            persistent=True,
+        )
+        for i, layer in enumerate(self.layers):
+            if i == len(self.layers) - 1:
+                y = dgl.distributed.DistTensor(
+                    (g.num_nodes(), self.n_classes),
+                    torch.float32,
+                    "h_last",
+                    persistent=True,
+                )
+            print(f"|V|={g.num_nodes()}, eval batch size: {batch_size}")
+
+            sampler = dgl.dataloading.NeighborSampler([-1])
+            dataloader = dgl.dataloading.DistNodeDataLoader(
+                g,
+                nodes,
+                sampler,
+                batch_size=batch_size,
+                shuffle=False,
+                drop_last=False,
+            )
+
+            for input_nodes, output_nodes, blocks in tqdm.tqdm(dataloader):
+                block = blocks[0].to(device)
+                h = x[input_nodes].to(device)
+                h_dst = h[:block.number_of_dst_nodes()]
+                h = layer(block, (h, h_dst))
+                if i != len(self.layers) - 1:
+                    h = F.relu(h)
+                    h = self.dropout(h)
+
+                y[output_nodes] = h.cpu()
+
+            x = y
+            g.barrier()
+        return y
+
+    @contextmanager
+    def join(self):
+        """dummy join for standalone"""
+        yield

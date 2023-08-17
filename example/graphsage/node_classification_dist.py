@@ -8,7 +8,7 @@ import torch.distributed as dist
 import time
 import numpy as np
 import os
-from utils.models import SAGE
+from utils.models import DistSAGE
 
 import DistGNN
 from DistGNN.cache import get_node_heat, get_cache_nids_selfish, get_cache_nids_selfless, compute_total_value_selfish, compute_total_value_selfless, get_available_memory, get_structure_space, get_feature_space
@@ -37,6 +37,7 @@ def run(rank, group_size, data, args):
     global_rank = rank + args.node_rank * args.node_world_size
 
     dist.init_process_group('nccl',
+                            init_method='env://',
                             world_size=global_world_size,
                             rank=global_rank)
     local_group, groups = dist.new_subgroups(group_size)
@@ -44,7 +45,6 @@ def run(rank, group_size, data, args):
 
     fan_out = [int(fanout) for fanout in args.fan_out.split(',')]
     train_nids = torch.from_numpy(train_nids_list[rank])
-
     if args.bias:
         probs_key = "probs"
         sampling_heat, feature_heat = get_node_heat(graph["indptr"],
@@ -62,7 +62,8 @@ def run(rank, group_size, data, args):
     torch.cuda.reset_peak_memory_stats()
 
     # create model
-    model = SAGE(graph["features"].shape[1], 256, num_classes, len(fan_out))
+    model = DistSAGE(graph["features"].shape[1], 256, num_classes,
+                     len(fan_out))
     model = model.cuda()
     model = nn.parallel.DistributedDataParallel(model,
                                                 device_ids=[rank],
