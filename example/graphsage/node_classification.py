@@ -79,19 +79,21 @@ def run(rank, world_size, data, args):
                                      args.batch_size,
                                      shuffle=True)
 
-    available_mem = get_available_memory(rank, 7 * 1024 * 1024 * 1024)
+    reserved_mem = 7 * 1024 * 1024 * 1024
+    available_mem = get_available_memory(rank, reserved_mem)
     print("GPU {}, available memory size = {:.3f} GB".format(
         rank, available_mem / 1024 / 1024 / 1024))
 
     # get cache nids
     bandwidth_gpu = 120.62
     bandwidth_host = 8.32
+    bandwidth_nvlink = 9.25
     sampling_read_bytes_gpu = 480
     sampling_read_bytes_host = 480
     feature_read_bytes_gpu = 480
     feature_read_bytes_host = 512
-    if args.cache_policy == "selfish":
-        sampling_cache_nids, feature_cache_nids = get_cache_nids_selfish(
+    if args.cache_policy in ["selfish", "auto"]:
+        sampling_cache_nids_selfish, feature_cache_nids_selfish = get_cache_nids_selfish(
             graph,
             sampling_heat,
             feature_heat,
@@ -103,8 +105,26 @@ def run(rank, world_size, data, args):
             sampling_read_bytes_host,
             feature_read_bytes_host,
             probs=probs_key)
-    else:
-        sampling_cache_nids, feature_cache_nids = get_cache_nids_selfless(
+        if args.cache_policy == "selfish":
+            sampling_cache_nids = sampling_cache_nids_selfish
+            feature_cache_nids = feature_cache_nids_selfish
+        else:
+            selfish_total_value = compute_total_value_selfish(
+                graph,
+                sampling_heat,
+                feature_heat,
+                sampling_cache_nids_selfish,
+                feature_cache_nids_selfish,
+                bandwidth_gpu,
+                sampling_read_bytes_gpu,
+                feature_read_bytes_gpu,
+                bandwidth_host,
+                sampling_read_bytes_host,
+                feature_read_bytes_host,
+                probs=probs_key)
+
+    if args.cache_policy in ["selfless", "auto"]:
+        sampling_cache_nids_selfless, feature_cache_nids_selfless = get_cache_nids_selfless(
             graph,
             sampling_heat,
             feature_heat,
@@ -116,6 +136,48 @@ def run(rank, world_size, data, args):
             sampling_read_bytes_host,
             feature_read_bytes_host,
             probs=probs_key)
+        if args.cache_policy == "selfless":
+            sampling_cache_nids = sampling_cache_nids_selfless
+            feature_cache_nids = feature_cache_nids_selfless
+        else:
+            selfless_total_value = compute_total_value_selfless(
+                graph,
+                sampling_heat,
+                feature_heat,
+                sampling_cache_nids_selfless,
+                feature_cache_nids_selfless,
+                bandwidth_gpu,
+                bandwidth_nvlink,
+                world_size,
+                sampling_read_bytes_gpu,
+                feature_read_bytes_gpu,
+                bandwidth_host,
+                sampling_read_bytes_host,
+                feature_read_bytes_host,
+                probs=probs_key)
+
+    if args.cache_policy == "auto":
+        selfish_value = torch.tensor([selfish_total_value], device="cuda")
+        selfless_value = torch.tensor([selfless_total_value], device="cuda")
+        dist.all_reduce(selfish_value, dist.ReduceOp.SUM)
+        dist.all_reduce(selfless_value, dist.ReduceOp.SUM)
+        if rank == 0:
+            print("Total selfish value = {:.2f}".format(
+                selfish_value[0].item()))
+            print("Total selfless value = {:.2f}".format(
+                selfless_value[0].item()))
+        if selfish_value[0].item() > selfless_value[0].item():
+            sampling_cache_nids = sampling_cache_nids_selfish
+            feature_cache_nids = feature_cache_nids_selfish
+            if rank == 0:
+                print("Choose selfish cache strategy...")
+        else:
+            sampling_cache_nids = sampling_cache_nids_selfless
+            feature_cache_nids = feature_cache_nids_selfless
+            if rank == 0:
+                print("Choose selfless cache strategy...")
+
+    dist.barrier()
 
     print(
         "GPU {}, sampling cache nids num = {}, cache size = {:.2f} GB".format(
@@ -234,8 +296,8 @@ if __name__ == '__main__':
         default="ogbn-papers100M",
         choices=["ogbn-products", "ogbn-papers100M", "ogbn-papers400M"])
     parser.add_argument("--cache-policy",
-                        default="selfish",
-                        choices=["selfish", "selfless"],
+                        default="auto",
+                        choices=["selfish", "selfless", "auto"],
                         type=str)
     args = parser.parse_args()
 
