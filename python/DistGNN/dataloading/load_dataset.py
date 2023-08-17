@@ -2,7 +2,7 @@ import torch
 import os
 
 
-def load_dataset(path, dataset_name, with_feature=True):
+def load_dataset(path, dataset_name, with_feature=True, with_probs=False):
     print("load {}...".format(dataset_name))
 
     meta_data = torch.load(os.path.join(path, "metadata.pt"))
@@ -23,6 +23,10 @@ def load_dataset(path, dataset_name, with_feature=True):
     if with_feature:
         features = torch.load(os.path.join(path, "features.pt"))
         graph_tensors["features"] = features
+    if with_probs:
+        probs = torch.load(os.path.join(path, "probs.pt"))
+        graph_tensors["probs"] = probs
+
     print("finish loading {}...".format(dataset_name))
 
     return graph_tensors, meta_data["num_classes"]

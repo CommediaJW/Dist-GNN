@@ -6,7 +6,7 @@ import os
 from scipy.sparse import coo_matrix
 
 
-def process_products(dataset_path, save_path):
+def process_products(dataset_path, save_path, bias=False):
     print("Process ogbn-products...")
 
     print("Read raw data...")
@@ -66,6 +66,10 @@ def process_products(dataset_path, save_path):
         torch.from_numpy(test_idx).long(),
         os.path.join(save_path, "test_idx.pt"))
 
+    if bias:
+        probs = torch.randn((indices.shape[0], )).abs().float()
+        torch.save(probs, os.path.join(save_path, "probs.pt"))
+
     print("Generate meta data...")
     num_classes = np.unique(labels[~np.isnan(labels)]).shape[0]
     feature_dim = features.shape[1]
@@ -87,7 +91,7 @@ def process_products(dataset_path, save_path):
     torch.save(meta_data, os.path.join(save_path, "metadata.pt"))
 
 
-def process_papers100M(dataset_path, save_path):
+def process_papers100M(dataset_path, save_path, bias=False):
     print("Process ogbn-papers100M...")
 
     print("Read raw data...")
@@ -144,6 +148,10 @@ def process_papers100M(dataset_path, save_path):
         torch.from_numpy(test_idx).long(),
         os.path.join(save_path, "test_idx.pt"))
 
+    if bias:
+        probs = torch.randn((indices.shape[0], )).abs().float()
+        torch.save(probs, os.path.join(save_path, "probs.pt"))
+
     print("Generate meta data...")
     num_classes = np.unique(labels[~np.isnan(labels)]).shape[0]
     feature_dim = features.shape[1]
@@ -165,7 +173,7 @@ def process_papers100M(dataset_path, save_path):
     torch.save(meta_data, os.path.join(save_path, "metadata.pt"))
 
 
-def generate_papers400M(papers100M_path, save_path):
+def generate_papers400M(papers100M_path, save_path, bias=False):
     print("Read ogbn-papers100M raw data...")
     data_file = np.load(os.path.join(papers100M_path, "raw/data.npz"))
     label_file = np.load(os.path.join(papers100M_path, "raw/node-label.npz"))
@@ -224,6 +232,9 @@ def generate_papers400M(papers100M_path, save_path):
     torch.save(
         torch.from_numpy(indices).long(), os.path.join(save_path,
                                                        "indices.pt"))
+    if bias:
+        probs = torch.randn((indices.shape[0], )).abs().float()
+        torch.save(probs, os.path.join(save_path, "probs.pt"))
     del indptr, indices, coo, csc, original_src, original_dst, intra_src, intra_dst, sm, dm, src, dst, data
 
     print("Generate features...")
@@ -321,12 +332,17 @@ if __name__ == '__main__':
         choices=["ogbn-products", "ogbn-papers100M", "ogbn-papers400M"])
     parser.add_argument("--root", help="Path of the dataset.")
     parser.add_argument("--save-path", help="Path to save the processed data.")
+    parser.add_argument(
+        "--bias",
+        action='store_true',
+        default=False,
+        help="Randomly generate probs as edge weight for the dataset.")
     args = parser.parse_args()
     print(args)
 
     if args.dataset == "ogbn-papers100M":
-        process_papers100M(args.root, args.save_path)
+        process_papers100M(args.root, args.save_path, args.bias)
     elif args.dataset == "ogbn-products":
-        process_products(args.root, args.save_path)
+        process_products(args.root, args.save_path, args.bias)
     elif args.dataset == "ogbn-papers400M":
-        generate_papers400M(args.root, args.save_path)
+        generate_papers400M(args.root, args.save_path, args.bias)

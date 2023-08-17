@@ -292,11 +292,6 @@ if __name__ == '__main__':
                         default=False,
                         help="Sample with bias.")
     parser.add_argument(
-        '--probs-path',
-        default=None,
-        type=int,
-        help="The probs file path. If none, generate probs randomly.")
-    parser.add_argument(
         "--dataset",
         default="ogbn-papers100M",
         choices=["ogbn-products", "ogbn-papers100M", "ogbn-papers400M"])
@@ -314,15 +309,13 @@ if __name__ == '__main__':
 
     torch.manual_seed(1)
 
-    graph, num_classes = load_dataset(args.root, args.dataset)
     if args.bias:
-        if args.probs_path is not None:
-            probs = torch.load(args.probs_path)
-            assert probs.numel() == graph["indices"].numel()
-            graph["probs"] = probs
-        else:
-            graph["probs"] = torch.randn(
-                (graph["indices"].shape[0], )).abs().float()
+        graph, num_classes = load_dataset(args.root,
+                                          args.dataset,
+                                          with_probs=True)
+        assert "probs" in graph
+    else:
+        graph, num_classes = load_dataset(args.root, args.dataset)
 
     # partition train nodes
     train_nids = graph.pop("train_idx")
