@@ -3,6 +3,7 @@
 
 #include "cache/cuda/ops.h"
 #include "common/pin_memory.h"
+#include "common/shared_mem.h"
 #include "feature/cuda/ops.h"
 #include "feature/feature_sever.h"
 #include "nccl/nccl_context.h"
@@ -17,7 +18,7 @@ namespace py = pybind11;
 PYBIND11_MODULE(dgs, m) {
   // classes
   auto m_classes = m.def_submodule("classes");
-  // tensor p2p cache manager
+
   py::class_<sampling::P2PCacheSampler>(m_classes, "P2PCacheSampler")
       .def(py::init<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor,
                     int64_t>())
@@ -43,6 +44,11 @@ PYBIND11_MODULE(dgs, m) {
       .def("_CAPI_get_device_tensor", &cache::TensorP2PServer::GetDeviceTensor)
       .def("_CAPI_get_local_device_tensor",
            &cache::TensorP2PServer::GetLocalDeviceTensor);
+
+  py::class_<SharedTensor>(m_classes, "SharedTensor")
+      .def(py::init<std::vector<int64_t>, py::object>())
+      .def("_CAPI_get_tensor", &SharedTensor::Tensor)
+      .def("_CAPI_load_from_tensor", &SharedTensor::LoadFromTensor);
 
   // ops
   auto m_ops = m.def_submodule("ops");
