@@ -3,6 +3,8 @@ import dgs
 
 
 def create_communicator(group_size, group=None):
+    assert dgs.ops._CAPI_nccl_is_initialized() == False
+
     group_rank = dist.get_rank() % group_size
     group_root = dist.get_rank() - dist.get_rank() % group_size
 

@@ -34,7 +34,6 @@ void *SharedMemory::CreateNew(size_t sz) {
   this->own_ = true;
 
   // We need to create a shared-memory file.
-  // TODO(zhengda) we need to report error if the shared-memory file exists.
   int flag = O_RDWR | O_CREAT;
   fd_ = shm_open(name.c_str(), flag, S_IRUSR | S_IWUSR);
   CHECK_NE(fd_, -1) << "fail to open " << name << ": " << strerror(errno);
@@ -92,6 +91,10 @@ inline size_t _getTensorTypeSizeOf(torch::Dtype type) {
   }
 }
 
+inline std::string _getSharedMemName(uint32_t id) {
+  return "shared" + std::to_string(id);
+}
+
 SharedTensor::SharedTensor(std::vector<int64_t> shapes,
                            pybind11::object dtype) {
   int64_t rank = dgs::nccl::GetLocalRank();
@@ -101,31 +104,35 @@ SharedTensor::SharedTensor(std::vector<int64_t> shapes,
   for (uint64_t i = 0; i < shapes.size(); i += 1) {
     numel *= shapes[i];
   }
-  size_t total_size = _getTensorTypeSizeOf(torch_dtype) * numel;
+  this->size_ = _getTensorTypeSizeOf(torch_dtype) * numel;
 
-  int shmid;
+  uint32_t shmid;
   if (rank == 0) {
     shmid = dgs::ctx::randn_uint64();
+    while (SharedMemory::Exist(_getSharedMemName(shmid))) {
+      shmid += 1;
+    }
   } else {
     shmid = 0;
   }
+
   CUDA_CALL(cudaHostRegister(&shmid, sizeof(int), cudaHostRegisterDefault));
   NCCL_CALL(ncclBroadcast(&shmid, &shmid, 1, ncclInt, 0,
                           dgs::nccl::nccl_ctx.global_comm_,
                           dgs::nccl::nccl_ctx.nccl_stream_));
   dgs::nccl::nccl_ctx.Barrier_();
   CUDA_CALL(cudaHostUnregister(&shmid));
-  std::string name = "shared" + std::to_string(shmid);
 
-  this->mem_ = std::make_shared<SharedMemory>(name);
-  void *data;
+  this->mem_ = std::make_shared<SharedMemory>(_getSharedMemName(shmid));
   if (rank == 0) {
-    data = this->mem_->CreateNew(total_size);
-  } else {
-    data = this->mem_->Open(total_size);
+    this->data_ = this->mem_->CreateNew(this->size_);
+  }
+  dgs::nccl::nccl_ctx.Barrier_();
+  if (rank != 0) {
+    this->data_ = this->mem_->Open(this->size_);
   }
   this->tensor_ = torch::from_blob(
-      data, shapes,
+      this->data_, shapes,
       torch::TensorOptions().dtype(torch_dtype).device(torch::kCPU));
 }
 
@@ -138,6 +145,18 @@ void SharedTensor::LoadFromTensor(torch::Tensor data) {
     }
 
     this->tensor_.copy_(data);
+  }
+}
+
+void SharedTensor::LoadFromDisk(std::string filename) {
+  if (dgs::nccl::GetLocalRank() == 0) {
+    int fd = open(filename.data(), O_RDONLY);
+    CHECK_NE(fd, -1) << "fail to open " << filename << ": " << strerror(errno);
+    void *ptr = mmap(NULL, this->size_, PROT_READ, MAP_PRIVATE, fd, 0);
+    CHECK_NE(ptr, MAP_FAILED) << "mmap failed with error " << strerror(errno);
+    memcpy(this->data_, ptr, this->size_);
+    CHECK(munmap(ptr, this->size_) != -1) << strerror(errno);
+    close(fd);
   }
 }
 

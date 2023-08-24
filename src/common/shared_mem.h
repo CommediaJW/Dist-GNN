@@ -72,11 +72,13 @@ class SharedTensor {
   ~SharedTensor(){};
 
   void LoadFromTensor(torch::Tensor data);
-  void LoadFromDisk(void);
+  void LoadFromDisk(std::string filename);
   torch::Tensor Tensor() { return tensor_; };
 
  private:
   std::shared_ptr<SharedMemory> mem_;
+  void *data_;
+  size_t size_;
   torch::Tensor tensor_;
 };
 

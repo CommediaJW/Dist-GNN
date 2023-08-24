@@ -48,7 +48,8 @@ PYBIND11_MODULE(dgs, m) {
   py::class_<SharedTensor>(m_classes, "SharedTensor")
       .def(py::init<std::vector<int64_t>, py::object>())
       .def("_CAPI_get_tensor", &SharedTensor::Tensor)
-      .def("_CAPI_load_from_tensor", &SharedTensor::LoadFromTensor);
+      .def("_CAPI_load_from_tensor", &SharedTensor::LoadFromTensor)
+      .def("_CAPI_load_from_disk", &SharedTensor::LoadFromDisk);
 
   // ops
   auto m_ops = m.def_submodule("ops");
@@ -74,6 +75,8 @@ PYBIND11_MODULE(dgs, m) {
 
   // cuda feature loading
   m_ops.def("_CAPI_cuda_index_select", &feature::cuda::GetFeaturesCUDA);
+
+  m_ops.def("_CAPI_nccl_is_initialized", &nccl::IsInitialized);
 
   m_ops.def("_Test_Randn", &ctx::randn_uint64);
   m_ops.def("_Test_NCCLTensorAllGather", &nccl::NCCLTensorAllGather);

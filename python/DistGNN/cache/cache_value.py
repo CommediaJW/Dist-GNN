@@ -65,6 +65,8 @@ def get_hot_nids_local(sampling_heat: torch.Tensor,
 def get_hot_nids_p2p_global(sampling_heat: torch.Tensor,
                             feature_heat: torch.Tensor,
                             group=None):
+    assert dist.is_initialized() == True
+
     group_size = dist.get_world_size(group)
     group_rank = dist.get_rank(group)
     global_group_root = dist.get_rank() - dist.get_rank() % group_size
@@ -359,6 +361,7 @@ def compute_total_value_selfless(graph,
                                  feature_read_bytes_host,
                                  probs: str = None,
                                  group=None):
+    assert dist.is_initialized() == True
 
     bandwidth_local = bandwidth_gpu - (num_gpu - 1) * bandwidth_nvlink
     local_value = compute_total_value_selfish(graph,

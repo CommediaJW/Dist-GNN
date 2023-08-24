@@ -30,6 +30,7 @@ void Barrier() { nccl_ctx.Barrier_(); }
 
 int GetLocalRank() { return nccl_ctx.local_rank_; }
 int GetWorldSize() { return nccl_ctx.world_size_; }
+bool IsInitialized() { return nccl_ctx.initialized_; }
 
 void NCCLContext::SetNCCL_(int64_t nranks, std::vector<int64_t> unique_id_array,
                            int64_t rank) {
@@ -41,6 +42,8 @@ void NCCLContext::SetNCCL_(int64_t nranks, std::vector<int64_t> unique_id_array,
   NCCL_CALL(ncclCommCount(global_comm_, &world_size_));
   nccl_stream_ = 0;
   CUDA_CALL(cudaMalloc(&device_buffer_, sizeof(float)));
+
+  initialized_ = true;
 }
 
 void NCCLContext::Barrier_() {
