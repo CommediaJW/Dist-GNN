@@ -15,7 +15,7 @@ tensor = None
 if dist.get_rank() == 0:
     tensor = torch.arange(0, 20)
 
-shared = shared_tensor(tensor.shape, tensor.dtype)
+shared = shared_tensor(tensor)
 
 if dist.get_rank() == 0:
     shared._CAPI_load_from_tensor(tensor)
