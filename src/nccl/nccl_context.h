@@ -26,6 +26,8 @@ class NCCLContext {
   int world_size_;
   cudaStream_t nccl_stream_;
   float* device_buffer_;
+
+  bool initialized_ = false;
 };
 
 typedef struct {
@@ -41,6 +43,7 @@ void SetNCCL(int64_t nranks, std::vector<int64_t> unique_id_array,
 std::vector<torch::Tensor> NCCLTensorAllGather(torch::Tensor local_tensor);
 int GetLocalRank();
 int GetWorldSize();
+bool IsInitialized();
 
 }  // namespace nccl
 }  // namespace dgs
