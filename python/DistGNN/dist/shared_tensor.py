@@ -3,12 +3,12 @@ import torch.distributed as dist
 import dgs
 
 
-def shared_tensor(tensor: torch.Tensor, root: int = 0):
+def shared_tensor(shape, dtype: torch.dtype, root: int = 0):
     assert dgs.ops._CAPI_nccl_is_initialized() == True
     assert dist.is_initialized() == True
 
     if dist.get_rank() == root:
-        broadcast_list = [tensor.shape, tensor.dtype]
+        broadcast_list = [shape, dtype]
     else:
         broadcast_list = [None, None]
     dist.broadcast_object_list(broadcast_list, root)

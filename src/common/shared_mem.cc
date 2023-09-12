@@ -36,12 +36,12 @@ void *SharedMemory::CreateNew(size_t sz) {
   // We need to create a shared-memory file.
   int flag = O_RDWR | O_CREAT;
   fd_ = shm_open(name.c_str(), flag, S_IRUSR | S_IWUSR);
-  CHECK_NE(fd_, -1) << "fail to open " << name << ": " << strerror(errno);
+  CHECK(fd_ != -1) << "fail to open " << name << ": " << strerror(errno);
   // Shared memory cannot be deleted if the process exits abnormally in Linux.
   auto res = ftruncate(fd_, sz);
-  CHECK_NE(res, -1) << "Failed to truncate the file. " << strerror(errno);
+  CHECK(res != -1) << "Failed to truncate the file. " << strerror(errno);
   ptr_ = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
-  CHECK_NE(ptr_, MAP_FAILED)
+  CHECK(ptr_ != MAP_FAILED)
       << "Failed to map shared memory. mmap failed with error "
       << strerror(errno);
   this->size_ = sz;
@@ -51,9 +51,9 @@ void *SharedMemory::CreateNew(size_t sz) {
 void *SharedMemory::Open(size_t sz) {
   int flag = O_RDWR;
   fd_ = shm_open(name.c_str(), flag, S_IRUSR | S_IWUSR);
-  CHECK_NE(fd_, -1) << "fail to open " << name << ": " << strerror(errno);
+  CHECK(fd_ != -1) << "fail to open " << name << ": " << strerror(errno);
   ptr_ = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
-  CHECK_NE(ptr_, MAP_FAILED)
+  CHECK(ptr_ != MAP_FAILED)
       << "Failed to map shared memory. mmap failed with error "
       << strerror(errno);
   this->size_ = sz;
@@ -151,13 +151,28 @@ void SharedTensor::LoadFromTensor(torch::Tensor data) {
 void SharedTensor::LoadFromDisk(std::string filename) {
   if (dgs::nccl::GetLocalRank() == 0) {
     int fd = open(filename.data(), O_RDONLY);
-    CHECK_NE(fd, -1) << "fail to open " << filename << ": " << strerror(errno);
+    CHECK(fd != -1) << "fail to open " << filename << ": " << strerror(errno);
     void *ptr = mmap(NULL, this->size_, PROT_READ, MAP_PRIVATE, fd, 0);
-    CHECK_NE(ptr, MAP_FAILED) << "mmap failed with error " << strerror(errno);
+    CHECK(ptr != MAP_FAILED) << "mmap failed with error " << strerror(errno);
     memcpy(this->data_, ptr, this->size_);
     CHECK(munmap(ptr, this->size_) != -1) << strerror(errno);
     close(fd);
   }
+}
+
+void SaveTensor2Disk(torch::Tensor tensor, std::string filename) {
+  size_t size = tensor.numel() * tensor.element_size();
+  int fd = open(filename.data(), O_RDWR | O_CREAT, (mode_t)0600);
+  CHECK(fd != -1) << "fail to create " << filename << ": " << strerror(errno);
+  lseek(fd, size, SEEK_SET);
+  write(fd, "", 1);
+  void *ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+  CHECK(ptr != MAP_FAILED) << "mmap failed with error " << strerror(errno);
+  void *tensor_ptr = tensor.storage().data();
+  memcpy(ptr, tensor_ptr, size);
+  msync(ptr, size, MS_SYNC);
+  CHECK(munmap(ptr, size) != -1) << strerror(errno);
+  close(fd);
 }
 
 }  // namespace dgs

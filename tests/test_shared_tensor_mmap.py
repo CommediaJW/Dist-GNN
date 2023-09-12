@@ -14,11 +14,14 @@ create_communicator(dist.get_world_size())
 tensor = None
 if dist.get_rank() == 0:
     tensor = torch.arange(0, 20)
+    a = tensor.shape
+    b = tensor.dtype
+DistGNN.capi.ops._CAPI_save_tensor_to_disk(tensor, "tensor")
 
 shared = shared_tensor(tensor.shape, tensor.dtype)
 
 if dist.get_rank() == 0:
-    shared._CAPI_load_from_tensor(tensor)
+    shared._CAPI_load_from_disk("tensor")
 
 time.sleep(1)
 dist.barrier()

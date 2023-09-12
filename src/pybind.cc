@@ -84,4 +84,6 @@ PYBIND11_MODULE(dgs, m) {
   m_ops.def("_Test_GetWorldSize", &nccl::GetWorldSize);
   m_ops.def("_Test_ExtractEdgeData", &sampling::cuda::ExtractEdgeData);
   m_ops.def("_Test_ExtractIndptr", &sampling::cuda::ExtractIndptr);
+
+  m_ops.def("_CAPI_save_tensor_to_disk", &SaveTensor2Disk);
 }

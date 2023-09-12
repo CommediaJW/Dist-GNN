@@ -82,6 +82,8 @@ class SharedTensor {
   torch::Tensor tensor_;
 };
 
+void SaveTensor2Disk(torch::Tensor tensor, std::string filename);
+
 }  // namespace dgs
 
 #endif
